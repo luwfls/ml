@@ -1,0 +1,8 @@
+script:
+  id: 简单塔
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 试炼之塔简单
+  - 通用
+  completion_count: 1

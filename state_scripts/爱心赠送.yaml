@@ -1,0 +1,7 @@
+script:
+  id: 爱心赠送
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 送爱心
+  completion_count: 1

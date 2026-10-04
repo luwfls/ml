@@ -1,0 +1,8 @@
+script:
+  id: PVP竞技场
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 竞技场_PVP
+  - 通用
+  completion_count: 1

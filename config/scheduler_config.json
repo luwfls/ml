@@ -1,0 +1,56 @@
+{
+  "scheduler": {
+    "startAt": "",
+    "dryRun": false,
+    "continueOnError": true
+  },
+  "defaults": {
+    "repeatCount": 1,
+    "retryCount": 0,
+    "weekdays": []
+  },
+  "items": [
+    {
+      "filename": "PVE竞技场.yaml",
+      "repeatCount": 1,
+      "retryCount": 0,
+      "weekdays": []
+    },
+    {
+      "filename": "PVP竞技场.yaml",
+      "repeatCount": 1,
+      "retryCount": 0,
+      "weekdays": []
+    },
+    {
+      "filename": "世界BOSS.yaml",
+      "repeatCount": 1,
+      "retryCount": 0,
+      "weekdays": []
+    },
+    {
+      "filename": "工会战PVE.yaml",
+      "repeatCount": 1,
+      "retryCount": 0,
+      "weekdays": []
+    },
+    {
+      "filename": "每日商店.yaml",
+      "repeatCount": 1,
+      "retryCount": 0,
+      "weekdays": []
+    },
+    {
+      "filename": "工会签到.yaml",
+      "repeatCount": 1,
+      "retryCount": 0,
+      "weekdays": []
+    },
+    {
+      "filename": "爱心赠送.yaml",
+      "repeatCount": 1,
+      "retryCount": 0,
+      "weekdays": []
+    }
+  ]
+}

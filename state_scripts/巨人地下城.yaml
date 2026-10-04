@@ -1,0 +1,8 @@
+script:
+  id: 巨人地下城
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 次元
+  - 地下城
+  completion_count: 1

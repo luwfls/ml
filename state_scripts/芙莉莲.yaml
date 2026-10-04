@@ -1,0 +1,8 @@
+script:
+  id: 芙莉莲
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 芙莉莲活动
+  - 通用
+  completion_count: 1

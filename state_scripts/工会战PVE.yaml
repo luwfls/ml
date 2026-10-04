@@ -1,0 +1,7 @@
+script:
+  id: 工会战PVE
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 工会对手战
+  completion_count: 1

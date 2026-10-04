@@ -1,0 +1,7 @@
+script:
+  id: 返回主岛
+  start_flows: []
+  loop_dirs:
+  - 主岛
+  - 通用
+  completion_count: 1

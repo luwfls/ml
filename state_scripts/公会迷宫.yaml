@@ -1,0 +1,8 @@
+script:
+  id: 公会迷宫
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 公会迷宫
+  - 通用
+  completion_count: 1

@@ -1,0 +1,8 @@
+script:
+  id: 工会签到
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 工会签到
+  - 通用
+  completion_count: 1

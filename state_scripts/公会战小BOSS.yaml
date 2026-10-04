@@ -1,0 +1,8 @@
+script:
+  id: 公会战小BOSS
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 工会主小BOSS
+  - 通用
+  completion_count: 1

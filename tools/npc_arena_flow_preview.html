@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>npc_arena 流程图与模板预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #19212a;
+      --muted: #5f6c78;
+      --line: #d6dde5;
+      --accent: #176b87;
+      --ok: #2f7d32;
+      --warn: #a15c00;
+      --danger: #a83232;
+      --shadow: 0 10px 30px rgba(28, 39, 54, 0.09);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+      line-height: 1.45;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
+      background: rgba(246, 247, 249, 0.94);
+      backdrop-filter: blur(10px);
+    }
+
+    .header-inner {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .dot.ok { background: var(--ok); }
+    .dot.warn { background: var(--warn); }
+    .dot.danger { background: var(--danger); }
+
+    .board {
+      display: grid;
+      grid-template-columns: minmax(340px, 1fr) minmax(340px, 1fr) minmax(340px, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .lane {
+      min-width: 0;
+    }
+
+    .lane-title {
+      margin: 0 0 10px;
+      padding-left: 2px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .node {
+      position: relative;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .node.ok {
+      border-left-color: var(--ok);
+    }
+
+    .node.warn {
+      border-left-color: var(--warn);
+    }
+
+    .node.danger {
+      border-left-color: var(--danger);
+    }
+
+    .node-head {
+      padding: 12px 14px 8px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid #edf1f5;
+    }
+
+    .step {
+      font-weight: 800;
+      color: var(--accent);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .node-title {
+      flex: 1;
+      min-width: 0;
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .node-body {
+      padding: 10px 14px 14px;
+    }
+
+    .desc {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      gap: 10px;
+    }
+
+    .tpl {
+      min-width: 0;
+      border: 1px solid #e3e9ef;
+      border-radius: 6px;
+      background: #fbfcfd;
+      overflow: hidden;
+    }
+
+    .tpl img {
+      display: block;
+      width: 100%;
+      height: 72px;
+      object-fit: contain;
+      padding: 8px;
+      background: #eef2f5;
+    }
+
+    .tpl figcaption {
+      padding: 7px 8px;
+      color: #384653;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .arrow {
+      margin: -4px 0 10px;
+      color: #8a97a3;
+      text-align: center;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .branch {
+      border: 1px dashed #b8c5d1;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfd;
+      margin-bottom: 14px;
+    }
+
+    .branch-title {
+      margin: 0 0 10px;
+      font-weight: 800;
+      color: var(--warn);
+    }
+
+    .small-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .small-list li {
+      margin: 4px 0;
+    }
+
+    .section {
+      margin-top: 22px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #eef2f5;
+      color: #243443;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1100px) {
+      .board {
+        grid-template-columns: 1fr;
+      }
+
+      .meta {
+        white-space: normal;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>npc_arena 流程图与模板预览</h1>
+      <div class="meta">当前脚本：<code>game_bot/scripted/scripts/npc_arena.py</code></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="legend">
+      <span><i class="dot"></i>普通动作/模板节点</span>
+      <span><i class="dot ok"></i>成功/结束路径</span>
+      <span><i class="dot warn"></i>判断/循环/恢复路径</span>
+      <span><i class="dot danger"></i>暂停失败路径</span>
+    </div>
+
+    <div class="board">
+      <section class="lane">
+        <h2 class="lane-title">1. 准备与主岛入口</h2>
+
+        <article class="node">
+          <div class="node-head"><span class="step">1.1</span><div class="node-title">创建运行上下文</div></div>
+          <div class="node-body">
+            <p class="desc">创建 <code>ScriptContext</code> 与 <code>ScriptRuntime</code>，绑定目标窗口句柄。</p>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node">
+          <div class="node-head"><span class="step">1.2</span><div class="node-title">聚焦游戏窗口</div></div>
+          <div class="node-body">
+            <p class="desc">调用窗口前置逻辑，后续点击和按键都走 dm 输入封装。</p>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node warn">
+          <div class="node-head"><span class="step">2.1</span><div class="node-title">返回主岛</div></div>
+          <div class="node-body">
+            <p class="desc">检测主岛战斗入口；失败时处理弹窗、点击绿地或按 ESC。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/主岛战斗.png" alt="主岛战斗"><figcaption>主岛战斗.png</figcaption></figure>
+              <figure class="tpl"><img src="../templates/icons/绿地.png" alt="绿地"><figcaption>绿地.png</figcaption></figure>
+              <figure class="tpl"><img src="../templates/icons/exit_game_no.png" alt="exit no"><figcaption>exit_game_no.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node">
+          <div class="node-head"><span class="step">2.2</span><div class="node-title">进入主岛战斗入口</div></div>
+          <div class="node-body">
+            <p class="desc">识别并点击 <code>主岛战斗.png</code>；找不到时再次点绿地恢复。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/主岛战斗.png" alt="主岛战斗"><figcaption>主岛战斗.png</figcaption></figure>
+              <figure class="tpl"><img src="../templates/icons/绿地.png" alt="绿地"><figcaption>绿地.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+
+        <div class="section">
+          <h2>弹窗切面</h2>
+          <article class="node warn">
+            <div class="node-head"><span class="step">A.1</span><div class="node-title">模板匹配失败后自动处理弹窗</div></div>
+            <div class="node-body">
+              <p class="desc">普通 <code>match_first</code> 失败后会自动探测弹窗，匹配到后按 ESC 并重试原模板。</p>
+              <div class="template-grid">
+                <figure class="tpl"><img src="../templates/icons/商店.png" alt="商店"><figcaption>商店.png</figcaption></figure>
+                <figure class="tpl"><img src="../templates/icons/礼包/礼包1.png" alt="礼包1"><figcaption>礼包1.png</figcaption></figure>
+                <figure class="tpl"><img src="../templates/icons/礼包/礼包2.png" alt="礼包2"><figcaption>礼包2.png</figcaption></figure>
+                <figure class="tpl"><img src="../templates/icons/礼包/礼包3.png" alt="礼包3"><figcaption>礼包3.png</figcaption></figure>
+                <figure class="tpl"><img src="../templates/icons/弹窗/弹窗_礼物箱.png" alt="礼物箱"><figcaption>弹窗_礼物箱.png</figcaption></figure>
+                <figure class="tpl"><img src="../templates/icons/弹窗/弹窗_购买1.png" alt="购买1"><figcaption>弹窗_购买1.png</figcaption></figure>
+                <figure class="tpl"><img src="../templates/icons/弹窗/弹窗_购买2.png" alt="购买2"><figcaption>弹窗_购买2.png</figcaption></figure>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="lane">
+        <h2 class="lane-title">3. 进入竞技场 NPC 页面</h2>
+
+        <article class="node">
+          <div class="node-head"><span class="step">3.1</span><div class="node-title">点击竞技场地图</div></div>
+          <div class="node-body">
+            <p class="desc">识别并点击地图上的竞技场入口。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场.png" alt="地图_竞技场"><figcaption>地图_竞技场.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node">
+          <div class="node-head"><span class="step">3.2</span><div class="node-title">进入竞技场</div></div>
+          <div class="node-body">
+            <p class="desc">点击竞技场详情页的进入按钮。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_进入.png" alt="竞技场进入"><figcaption>地图_竞技场_进入.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node">
+          <div class="node-head"><span class="step">3.3</span><div class="node-title">点击挑战页签</div></div>
+          <div class="node-body">
+            <p class="desc">打开 NPC 挑战列表。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_进入_挑战.png" alt="竞技场挑战"><figcaption>地图_竞技场_进入_挑战.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+
+        <div class="section">
+          <h2>4. NPC 列表扫描</h2>
+          <article class="node warn">
+            <div class="node-head"><span class="step">4.1</span><div class="node-title">查找可战斗 NPC</div></div>
+            <div class="node-body">
+              <p class="desc">先找 NPC 存在标志；找不到就检查是否到底。</p>
+              <div class="template-grid">
+                <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_NPC_存在.png" alt="NPC存在"><figcaption>地图_竞技场_NPC_存在.png</figcaption></figure>
+                <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_NPC_结束.png" alt="NPC结束"><figcaption>地图_竞技场_NPC_结束.png</figcaption></figure>
+              </div>
+            </div>
+          </article>
+
+          <article class="node warn">
+            <div class="node-head"><span class="step">4.2</span><div class="node-title">没找到 NPC 时上拉列表</div></div>
+            <div class="node-body">
+              <p class="desc">在客户端中线 <code>x = width / 2</code>、<code>y = height * 0.63</code> 位置向上拖拽 160px；最多 30 次。</p>
+              <ul class="small-list">
+                <li>未到底：继续拖拽并回到 4.1</li>
+                <li>到底：结束脚本</li>
+                <li>拖拽超过上限：暂停 <code>npc_list_end_not_found</code></li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="lane">
+        <h2 class="lane-title">5. 单场 NPC 战斗循环</h2>
+
+        <article class="node">
+          <div class="node-head"><span class="step">5.1</span><div class="node-title">点击 PVE</div></div>
+          <div class="node-body">
+            <p class="desc">进入 NPC 的 PVE 挑战项。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_进入_挑战_PVE.png" alt="PVE"><figcaption>地图_竞技场_进入_挑战_PVE.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node warn">
+          <div class="node-head"><span class="step">5.2</span><div class="node-title">查找并点击 NPC 战斗按钮</div></div>
+          <div class="node-body">
+            <p class="desc">找不到战斗按钮时检查到底标志；未到底就回到 4.2 上拉列表。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_进入_挑战_战斗.png" alt="NPC战斗"><figcaption>地图_竞技场_进入_挑战_战斗.png</figcaption></figure>
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_NPC_结束.png" alt="NPC结束"><figcaption>地图_竞技场_NPC_结束.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node">
+          <div class="node-head"><span class="step">5.3</span><div class="node-title">按空格开始战斗</div></div>
+          <div class="node-body">
+            <p class="desc">当前逻辑不再点击旧的开始按钮模板；等待 500ms 后按 <code>Space</code>，再等待 1000ms。</p>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node warn">
+          <div class="node-head"><span class="step">5.4</span><div class="node-title">点击开始自动战斗</div></div>
+          <div class="node-body">
+            <p class="desc">最多尝试 30 次，每次间隔 1000ms。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_开始自动战斗.png" alt="开始自动战斗"><figcaption>地图_竞技场_开始自动战斗.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+        <div class="arrow">↓</div>
+
+        <article class="node warn">
+          <div class="node-head"><span class="step">5.5</span><div class="node-title">等待战斗结果</div></div>
+          <div class="node-body">
+            <p class="desc">最多轮询 300 次；找到胜利或战斗结束后点击结果并回到 4.1。</p>
+            <div class="template-grid">
+              <figure class="tpl"><img src="../templates/icons/地图_竞技场/地图_竞技场_胜利.png" alt="胜利"><figcaption>地图_竞技场_胜利.png</figcaption></figure>
+              <figure class="tpl"><img src="../templates/icons/战斗结束.png" alt="战斗结束"><figcaption>战斗结束.png</figcaption></figure>
+            </div>
+          </div>
+        </article>
+
+        <div class="section">
+          <h2>6. 结束与暂停</h2>
+          <article class="node ok">
+            <div class="node-head"><span class="step">6.1</span><div class="node-title">正常结束</div></div>
+            <div class="node-body">
+              <p class="desc">识别到底标志，记录 <code>npc_battle_count</code> 和 <code>npc_list_drag_count</code> 后结束。</p>
+            </div>
+          </article>
+          <article class="node danger">
+            <div class="node-head"><span class="step">6.2</span><div class="node-title">暂停节点</div></div>
+            <div class="node-body">
+              <ul class="small-list">
+                <li><code>arena_map_not_found</code></li>
+                <li><code>arena_enter_not_found</code></li>
+                <li><code>arena_challenge_not_found</code></li>
+                <li><code>arena_pve_not_found</code></li>
+                <li><code>npc_list_end_not_found</code></li>
+                <li><code>npc_battle_not_found_after_list_drag</code></li>
+                <li><code>arena_auto_battle_not_found</code></li>
+                <li><code>arena_battle_result_not_found</code></li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,8 @@
+script:
+  id: 商店钻石25
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 商店钻石
+  - 通用
+  completion_count: 1

@@ -1,0 +1,7 @@
+script:
+  id: 次元之门
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 次元
+  completion_count: 1

@@ -1,0 +1,30 @@
+app:
+  name: monster-job
+  runtime_dir: runtime
+game:
+  window_mode: android_emulator
+  window_title: Android Device
+  process_name: SummonersWar
+  window_rect:
+    anchor: top_right
+    top: 0
+    right: 0
+  window_size:
+    width: 1093
+    height: 674
+input:
+  backend: adb
+adb:
+  executable: D:\Program Files\Netease\MuMuPlayer\nx_main\adb.exe
+  serial: emulator-5554
+  command_timeout_seconds: 10
+  gestures:
+    scroll_swipe_fraction: 0.5
+    scroll_anchor_x_percent: 50
+capture:
+  backend: auto
+dm:
+  display: gdi
+  mouse: windows
+  keypad: windows
+  bind_mode: 0

@@ -1,0 +1,8 @@
+script:
+  id: 魔法制作-远古炼化石
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 每周魔法制作-远古炼化石
+  - 通用
+  completion_count: 1

@@ -1,0 +1,8 @@
+script:
+  id: 钻石建筑
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 领钻石
+  - 弹窗
+  completion_count: 2

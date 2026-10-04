@@ -1,0 +1,3 @@
+actions:
+  observe_battle:
+    type: noop

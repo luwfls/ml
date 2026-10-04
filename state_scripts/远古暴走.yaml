@@ -1,0 +1,7 @@
+script:
+  id: 远古暴走
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 远古暴走
+  completion_count: 1

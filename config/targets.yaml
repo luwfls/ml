@@ -1,0 +1,6 @@
+targets:
+  battle_settings:
+    type: template
+    template: templates/icons/battle_settings.png
+    region: battle_controls
+    threshold: 0.85

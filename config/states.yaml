@@ -1,0 +1,8 @@
+states:
+  battle:
+    priority: 10
+    any:
+      - type: target_exists
+        target: battle_settings
+  unknown:
+    fallback: true

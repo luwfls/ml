@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monster Job32 开发计划</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --text: #20242a;
+      --muted: #667085;
+      --line: #d8dee9;
+      --accent: #2563eb;
+      --todo: #64748b;
+      --doing: #d97706;
+      --done: #16a34a;
+      --blocked: #dc2626;
+      --code: #f1f5f9;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --panel: #1f2937;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --line: #374151;
+        --accent: #60a5fa;
+        --code: #111827;
+      }
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    header {
+      padding: 32px 40px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.25;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 20px;
+      border-left: 4px solid var(--accent);
+      padding-left: 10px;
+    }
+
+    h3 {
+      margin: 20px 0 8px;
+      font-size: 16px;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      background: color-mix(in srgb, var(--panel) 92%, var(--bg));
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 2px 9px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid currentColor;
+      white-space: nowrap;
+    }
+
+    .todo { color: var(--todo); }
+    .doing { color: var(--doing); }
+    .done { color: var(--done); }
+    .blocked { color: var(--blocked); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: color-mix(in srgb, var(--panel) 86%, var(--accent));
+      font-weight: 700;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code,
+    pre {
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    code {
+      padding: 1px 5px;
+    }
+
+    pre {
+      padding: 12px;
+      overflow: auto;
+    }
+
+    ul {
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }
+
+    .phase-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Monster Job32 开发计划</h1>
+    <p class="subtitle">目标：先理解魔灵召唤玩法，再沉淀状态识别、动作执行、任务状态机，最终接入 Agent 执行重复游戏任务。</p>
+    <div class="legend">
+      <span class="status todo">待开始</span>
+      <span class="status doing">进行中</span>
+      <span class="status done">已完成</span>
+      <span class="status blocked">阻塞</span>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>总体架构方向</h2>
+      <div class="grid">
+        <div class="card">
+          <strong>1. 玩法知识采集</strong>
+          <span class="muted">通过截图、模板、状态、动作标注，把真实游戏页面转成结构化知识。</span>
+        </div>
+        <div class="card">
+          <strong>2. 状态识别</strong>
+          <span class="muted">多个模板证据合成语义状态，例如 home、battle_running、battle_result。</span>
+        </div>
+        <div class="card">
+          <strong>3. 玩法状态机</strong>
+          <span class="muted">用状态、动作、条件、变量、超时和重试表达完整玩法流程。</span>
+        </div>
+        <div class="card">
+          <strong>4. Agent 决策</strong>
+          <span class="muted">Agent 只选择白名单语义动作，不直接点击坐标。</span>
+        </div>
+      </div>
+      <pre>游戏窗口 → 截图 → 状态识别 → 玩法状态机/Agent 决策 → 语义动作 → dm.dll 输入执行 → 游戏窗口</pre>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 0：现有基础确认</h2>
+        <span class="status doing">进行中</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>确认 dm.dll 输入链路</td>
+            <td>键盘鼠标必须继续通过 <code>game_bot.core.input</code> 和注册的 <code>dm.dll</code> COM 插件执行。</td>
+            <td><span class="status done">已完成</span></td>
+          </tr>
+          <tr>
+            <td>确认截图能力</td>
+            <td>当前已能通过窗口句柄截取游戏客户端区域，例如 <code>SummonersWar</code> 窗口。</td>
+            <td><span class="status done">已完成</span></td>
+          </tr>
+          <tr>
+            <td>确认模板匹配基础</td>
+            <td>现有项目已有 OpenCV 模板匹配和模板管理基础，需要继续复用。</td>
+            <td><span class="status done">已完成</span></td>
+          </tr>
+          <tr>
+            <td>确认 workflow 当前能力边界</td>
+            <td>当前 workflow 偏图片识别点击，缺少状态判断、条件、变量、循环、超时等玩法逻辑能力。</td>
+            <td><span class="status doing">进行中</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 1：玩法/模板标注数据升级</h2>
+        <span class="status todo">待开始</span>
+      </div>
+      <p>目标：把当前模板标注从“保存图片模板”升级成“保存 Agent 可理解的玩法知识”。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>扩展模板 JSON 字段</td>
+            <td>新增 <code>activity</code>、<code>state</code>、<code>purpose</code>、<code>action_name</code>、<code>expected_next_state</code>、<code>weight</code>、<code>threshold</code>、<code>source_screenshot</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>标注截图归档</td>
+            <td>保存样本截图到玩法目录，例如 <code>data/gameplay/repeat_dungeon/samples/home/xxx.png</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>支持状态标注</td>
+            <td>截图保存时填写当前语义状态，例如 <code>home</code>、<code>battle_menu</code>、<code>team_select</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>支持模板用途标注</td>
+            <td>模板用途区分为 <code>state_evidence</code>、<code>action_target</code>、<code>blocking_popup</code>、<code>resource_indicator</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>支持动作绑定</td>
+            <td>当模板是可点击目标时，绑定语义动作，例如 <code>open_battle_menu</code>、<code>start_battle</code>、<code>replay_battle</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>生成 states/actions 草稿</td>
+            <td>根据模板 JSON 生成或更新 <code>states.yaml</code> 和 <code>actions.yaml</code> 草稿。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 2：状态识别层</h2>
+        <span class="status todo">待开始</span>
+      </div>
+      <p>目标：多个模板证据合成一个语义状态，workflow 和 Agent 不再直接面对模板名。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>定义状态模型</td>
+            <td>新增 <code>GameStateResult</code>、<code>EvidenceResult</code>，包含状态名、置信度、证据、截图路径、时间戳。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现 StateDetector</td>
+            <td>输入截图和玩法 profile，输出当前最可信状态。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现多证据加权</td>
+            <td>状态由多个模板证据按 weight 汇总，不再单模板决定状态。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现状态优先级</td>
+            <td>异常弹窗、断线、体力不足等状态优先级高于普通页面状态。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现 stable_frames</td>
+            <td>连续多帧识别到同一状态才认为稳定，减少动画和加载过程误判。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现 unknown 策略</td>
+            <td>unknown 多次出现时保存截图、暂停或进入恢复流程，禁止乱点。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 3：语义动作层</h2>
+        <span class="status todo">待开始</span>
+      </div>
+      <p>目标：把模板点击封装成白名单语义动作，后续 workflow 和 Agent 只能选择这些动作。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>定义 ActionRegistry</td>
+            <td>统一注册动作，例如 <code>open_battle_menu</code>、<code>start_battle</code>、<code>confirm_reward</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现 click_template 动作</td>
+            <td>通过模板定位目标，再调用 dm.dll 输入执行点击。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现 wait 动作</td>
+            <td>支持短等待、长等待、战斗中周期性检查。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现动作结果验证</td>
+            <td>动作执行后等待 <code>expected_next_state</code>，失败则重试或进入恢复。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现动作安全限制</td>
+            <td>动作只能作用于指定游戏窗口，禁止 Agent 任意坐标点击。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 4：workflow 逻辑能力补齐</h2>
+        <span class="status todo">待开始</span>
+      </div>
+      <p>目标：让现有 workflow 从“图片识别点击脚本”升级为支持状态、条件、变量、循环和超时的执行器。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>新增 detect_state 节点</td>
+            <td>执行截图和状态识别，把结果写入 workflow context。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>新增 wait_state 节点</td>
+            <td>等待指定状态或任一状态出现，支持超时。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>新增 if_state 节点</td>
+            <td>根据当前状态分支执行不同节点。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>新增 if_condition 节点</td>
+            <td>支持变量比较，例如 <code>completed_count &lt; target_count</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>新增变量节点</td>
+            <td>支持 <code>set_var</code>、<code>inc_var</code>，用于次数统计和任务进度。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>新增 loop/retry 节点</td>
+            <td>支持循环执行、失败重试、最大次数保护。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>新增 stop 节点</td>
+            <td>支持主动停止任务并输出原因。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 5：玩法状态机 / Activity Runner</h2>
+        <span class="status todo">待开始</span>
+      </div>
+      <p>目标：复杂玩法不再只依赖线性 workflow，而是用 activity.yaml 表达状态、动作、条件、完成条件和异常中断。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>定义 activity.yaml 结构</td>
+            <td>包含目标、变量、状态转移、完成条件、失败条件、interrupts。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现 ActivityRunner</td>
+            <td>运行 observe → decide → act → verify 循环。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现全局 interrupt</td>
+            <td>任何玩法遇到 <code>network_error</code>、<code>blocking_popup</code>、<code>energy_insufficient</code>、<code>unknown</code> 都优先处理。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现任务变量</td>
+            <td>支持 <code>completed_count</code>、<code>target_count</code>、<code>elapsed_seconds</code>、<code>retry_count</code>。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现连续战斗状态机</td>
+            <td>第一条落地玩法：完成 3 次连续战斗，每次最长约 20~25 分钟。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现世界 Boss 状态机</td>
+            <td>第二条玩法：消耗世界 Boss 3 次次数，验证短流程任务。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现爬塔状态机</td>
+            <td>第三条玩法：验证楼层推进、失败停止、奖励确认。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 6：Agent 接入</h2>
+        <span class="status todo">待开始</span>
+      </div>
+      <p>目标：Agent 面对结构化观察和白名单动作做决策，而不是直接看图点坐标。</p>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>定义 GameEnvironment</td>
+            <td>提供 <code>observe()</code>、<code>available_actions()</code>、<code>execute(action)</code> 接口。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>定义 Agent 输入输出模型</td>
+            <td>输入目标、当前状态、变量、可选动作、最近日志；输出动作和原因。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现 RuleBasedAgent</td>
+            <td>第一版使用规则 Agent 跑通连续战斗，验证架构。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>实现动作白名单校验</td>
+            <td>Agent 输出必须在当前状态的 available_actions 内，否则停止。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>接入 LLM Agent</td>
+            <td>后续用于多任务调度、unknown 分析、失败原因解释和 workflow 草稿生成。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>接入视觉辅助分析</td>
+            <td>unknown 截图交给视觉模型辅助判断，但不允许视觉模型直接控制鼠标。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="phase-title">
+        <h2>阶段 7：运行监控与安全保护</h2>
+        <span class="status todo">待开始</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>说明</th>
+            <th>完成状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>运行日志结构化</td>
+            <td>记录 observation、available_actions、decision、action_result、screenshot。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>异常截图保存</td>
+            <td>unknown、低置信度、动作失败、超时都保存截图方便回溯。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>暂停/继续/停止</td>
+            <td>workbench 提供手动控制，人工停止优先级最高。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>卡死检测</td>
+            <td>长时间状态无变化、截图无变化或超过最大任务时长时自动暂停。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+          <tr>
+            <td>任务运行面板</td>
+            <td>显示当前状态、置信度、证据、当前动作、变量、日志和最近截图。</td>
+            <td><span class="status todo">待开始</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>建议的近期最小闭环</h2>
+      <ol>
+        <li>扩展模板 JSON：先加 <code>activity</code>、<code>state</code>、<code>purpose</code>、<code>action_name</code>、<code>expected_next_state</code>。</li>
+        <li>用当前游戏主城截图标注 <code>global/home</code>，框出 <code>battle_button</code>。</li>
+        <li>手动进入战斗菜单，继续截图并标注 <code>battle_menu</code>。</li>
+        <li>沉淀连续战斗所需状态：<code>home</code>、<code>battle_menu</code>、<code>dungeon_select</code>、<code>team_select</code>、<code>battle_running</code>、<code>battle_result</code>。</li>
+        <li>实现最小 <code>StateDetector</code>：模板加权、优先级、unknown。</li>
+        <li>实现最小 <code>ActionRegistry</code>：click_template + expected_next_state 验证。</li>
+        <li>实现连续战斗 3 次的 RuleBasedAgent / ActivityRunner。</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

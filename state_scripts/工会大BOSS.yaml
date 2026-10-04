@@ -1,0 +1,7 @@
+script:
+  id: 工会大BOSS
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 工会主大BOSS
+  completion_count: 1

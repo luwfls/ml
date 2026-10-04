@@ -1,0 +1,8 @@
+script:
+  id: 每日商店
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 每日商店
+  - 通用
+  completion_count: 1

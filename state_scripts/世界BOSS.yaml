@@ -1,0 +1,8 @@
+script:
+  id: 世界BOSS
+  start_flows:
+  - 世界地图
+  loop_dirs:
+  - 世界BOSS
+  - 通用
+  completion_count: 1

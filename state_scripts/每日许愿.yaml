@@ -1,0 +1,8 @@
+script:
+  id: 每日许愿
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 每日许愿
+  - 通用
+  completion_count: 1

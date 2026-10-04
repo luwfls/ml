@@ -1,0 +1,3 @@
+policy:
+  battle:
+    action: observe_battle

@@ -1,0 +1,14 @@
+popups:
+  rules:
+    - name: gift_popup
+      enabled: true
+      threshold: 0.74
+      action: esc
+      templates:
+        - templates/icons/商店.png
+        - templates/icons/礼包/礼包1.png
+        - templates/icons/礼包/礼包2.png
+        - templates/icons/礼包/礼包3.png
+        - templates/icons/弹窗/弹窗_礼物箱.png
+        - templates/icons/弹窗/弹窗_购买1.png
+        - templates/icons/弹窗/弹窗_购买2.png

@@ -1,0 +1,7 @@
+script:
+  id: 切换账号
+  start_flows:
+  - 返回主岛
+  loop_dirs:
+  - 切换账号1
+  completion_count: 1

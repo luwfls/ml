@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monster Job Vue Workbench</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --ink: #1f2937;
+      --muted: #64748b;
+      --line: #e5e7eb;
+      --brand: #2563eb;
+      --brand-dark: #1d4ed8;
+      --forge-bg: #091012;
+      --forge-panel: #0b1517;
+      --forge-card: #101f22;
+      --forge-ink: #d8f3ea;
+      --forge-muted: #95b8ad;
+      --forge-accent: #d7a84f;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Segoe UI", "Microsoft YaHei UI", Arial, sans-serif; }
+    [v-cloak] { display: none; }
+
+    .app-shell { min-height: 100vh; }
+    .sidebar {
+      width: 238px !important;
+      color: #e5edf8;
+      background: linear-gradient(180deg, #111827, #0f172a);
+      box-shadow: 8px 0 24px rgba(15, 23, 42, .12);
+    }
+    .brand { padding: 18px 18px 14px; border-bottom: 1px solid rgba(226, 232, 240, .12); }
+    .brand-title { margin: 0; font-size: 18px; line-height: 1.15; font-weight: 800; letter-spacing: .01em; }
+    .brand-subtitle { margin: 6px 0 0; color: #94a3b8; font-size: 12px; line-height: 1.45; }
+    .sidebar .el-menu { border-right: 0; background: transparent; }
+    .sidebar .el-menu-item { color: #cbd5e1; }
+    .sidebar .el-menu-item:hover, .sidebar .el-menu-item:focus { background: rgba(37, 99, 235, .16); }
+    .sidebar .el-menu-item.is-active { color: #fff; background: rgba(37, 99, 235, .28); }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      height: auto !important;
+      min-height: 64px;
+      padding: 12px 18px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .page-title { margin: 0; font-size: 18px; font-weight: 800; }
+    .page-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+    .topbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .main { padding: 14px; }
+
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .metric-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--panel); }
+    .metric-value { font-size: 26px; font-weight: 800; line-height: 1; }
+    .metric-label { margin-top: 7px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+
+    .content-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 12px; align-items: start; }
+    .section-card { border-radius: 12px; }
+    .card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .card-title h2, .card-title h3 { margin: 0; font-size: 16px; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .mono { font-family: Consolas, "Cascadia Code", monospace; white-space: pre-wrap; word-break: break-word; }
+    .toolbar-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+
+    .forge-page {
+      margin: -14px;
+      min-height: calc(100vh - 65px);
+      padding: 14px;
+      color: var(--forge-ink);
+      background: radial-gradient(circle at 10% 0%, rgba(215, 168, 79, .16), transparent 26%), var(--forge-bg);
+      font-family: "Bahnschrift", "Cascadia Code", "Microsoft YaHei UI", sans-serif;
+    }
+    .forge-command {
+      display: grid;
+      grid-template-columns: minmax(180px, 240px) minmax(280px, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      border: 1px solid rgba(139, 190, 172, .18);
+      border-radius: 16px;
+      padding: 12px;
+      background: linear-gradient(135deg, rgba(10, 24, 26, .98), rgba(4, 10, 12, .98));
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .22);
+    }
+    .forge-kicker { margin: 0 0 4px; color: var(--forge-accent); font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    .forge-title { margin: 0; color: #f2fff9; font-size: 20px; line-height: 1.1; }
+    .forge-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .forge-stat { border: 1px solid rgba(139, 190, 172, .15); border-radius: 12px; padding: 10px 12px; background: rgba(0, 0, 0, .24); }
+    .forge-stat strong { display: block; color: #f8df9c; font-size: 18px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .forge-stat span { display: block; margin-top: 5px; color: #78a296; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+    .forge-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 340px 400px; gap: 12px; align-items: start; }
+    .forge-card { border: 1px solid rgba(139, 190, 172, .16); border-radius: 14px; background: linear-gradient(180deg, rgba(9, 20, 22, .98), rgba(4, 10, 12, .98)); box-shadow: 0 12px 28px rgba(0, 0, 0, .18); }
+    .forge-card .el-card__header { border-bottom-color: rgba(139, 190, 172, .14); color: #f2fff9; }
+    .forge-card .el-card__body { color: var(--forge-ink); }
+    .forge-card .el-input__inner, .forge-card .el-textarea__inner { border-color: rgba(139, 190, 172, .32); background: rgba(7, 18, 20, .88); color: var(--forge-ink); }
+    .capture-stage { min-height: 460px; overflow: auto; border: 1px solid rgba(139, 190, 172, .20); border-radius: 12px; padding: 8px; background: rgba(2, 8, 9, .85); }
+    .capture-preview { display: block; width: auto; height: auto; max-width: none; max-height: none; object-fit: none; border: 1px solid #334155; border-radius: 8px; background: #f8fafc; }
+    .template-list { max-height: 460px; overflow: auto; }
+    .template-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(139, 190, 172, .10); }
+    .template-row:last-child { border-bottom: 0; }
+    .template-name { overflow: hidden; color: #edfdf6; font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .template-meta { color: var(--forge-muted); font-size: 11px; }
+
+    .flow-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr) 420px; gap: 12px; align-items: start; }
+    .flow-list { display: grid; gap: 8px; max-height: calc(100vh - 190px); overflow: auto; }
+    .flow-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #f8fafc; cursor: pointer; transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease; }
+    .flow-item:hover { border-color: #93c5fd; transform: translateY(-1px); }
+    .flow-item.active { border-color: var(--brand); background: #eff6ff; box-shadow: 0 0 0 2px rgba(37, 99, 235, .12); }
+    .flow-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 800; }
+    .flow-meta { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .yaml-preview { min-height: 180px; max-height: 320px; overflow: auto; border-radius: 8px; padding: 10px; background: #0f172a; color: #dbeafe; }
+    .log-box { min-height: 260px; max-height: calc(100vh - 320px); overflow: auto; border-radius: 8px; padding: 10px; background: #0f172a; color: #dbeafe; }
+
+    @media (max-width: 1500px) {
+      .forge-workspace { grid-template-columns: minmax(0, 1fr) 320px; }
+      .forge-workspace .span-main { grid-column: 1 / -1; }
+      .flow-layout { grid-template-columns: 300px minmax(0, 1fr); }
+      .flow-layout .span-main { grid-column: 1 / -1; }
+    }
+    @media (max-width: 1100px) {
+      .sidebar { width: 72px !important; }
+      .brand-subtitle, .brand-title span { display: none; }
+      .metric-grid, .content-grid, .forge-command, .forge-stats, .forge-workspace, .flow-layout { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .topbar-actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <el-container class="app-shell">
+      <el-aside class="sidebar">
+        <div class="brand">
+          <h1 class="brand-title">MJ<span> Vue Workbench</span></h1>
+          <p class="brand-subtitle">基于 Vue 2 + Element UI 的新版工作台脚手架</p>
+        </div>
+        <el-menu :default-active="activePage" @select="activePage = $event">
+          <el-menu-item index="dashboard"><i class="el-icon-data-board"></i><span slot="title">总览</span></el-menu-item>
+          <el-menu-item index="templates"><i class="el-icon-crop"></i><span slot="title">模板 / 截图</span></el-menu-item>
+          <el-menu-item index="flows"><i class="el-icon-connection"></i><span slot="title">状态流程</span></el-menu-item>
+          <el-menu-item index="window"><i class="el-icon-monitor"></i><span slot="title">窗口工具</span></el-menu-item>
+        </el-menu>
+      </el-aside>
+
+      <el-container>
+        <el-header class="topbar">
+          <div>
+            <h2 class="page-title">{{ pageTitle }}</h2>
+            <p class="page-subtitle">{{ statusText }}</p>
+          </div>
+          <div class="topbar-actions">
+            <el-tag size="small" :type="apiAvailable ? 'success' : 'danger'">API {{ apiAvailable ? '已连接' : '不可用' }}</el-tag>
+            <el-tag size="small" type="info" v-if="settings.game">{{ windowSizeText }}</el-tag>
+            <el-button size="small" icon="el-icon-refresh" :loading="bootstrapping" @click="bootstrap">刷新数据</el-button>
+          </div>
+        </el-header>
+
+        <el-main class="main">
+          <section v-if="activePage === 'dashboard'">
+            <div class="metric-grid">
+              <div class="metric-card"><div class="metric-value">{{ templates.length }}</div><div class="metric-label">Templates</div></div>
+              <div class="metric-card"><div class="metric-value">{{ templateGroups.length }}</div><div class="metric-label">Groups</div></div>
+              <div class="metric-card"><div class="metric-value">{{ flows.length }}</div><div class="metric-label">Template Loops</div></div>
+              <div class="metric-card"><div class="metric-value">{{ flows.length }}</div><div class="metric-label">State Flows</div></div>
+            </div>
+            <div class="content-grid">
+              <el-card class="section-card" shadow="never">
+                <div slot="header" class="card-title"><h2>脚手架说明</h2><el-tag size="small">Vue 2 + Element UI</el-tag></div>
+                <el-timeline>
+                  <el-timeline-item timestamp="当前" type="primary">保留现有 Python API，不改动旧页面；此页面作为新版工作台入口逐步迁移功能。</el-timeline-item>
+                  <el-timeline-item timestamp="已接入">/api/bootstrap、模板列表、状态流程列表、截图、窗口基础操作。</el-timeline-item>
+                  <el-timeline-item timestamp="下一步">把旧页面的大块 DOM/原生事件拆成 Vue 组件：TemplateForge、StateFlowEditor、WindowPanel。</el-timeline-item>
+                </el-timeline>
+              </el-card>
+              <el-card class="section-card" shadow="never">
+                <div slot="header" class="card-title"><h3>启动状态</h3></div>
+                <el-descriptions :column="1" size="small" border>
+                  <el-descriptions-item label="窗口">{{ windowInfo ? windowInfo.title : startupError || '未准备' }}</el-descriptions-item>
+                  <el-descriptions-item label="模板能力"><el-tag size="mini" :type="capabilities.template ? 'success' : 'info'">{{ capabilities.template ? '可用' : '不可用' }}</el-tag></el-descriptions-item>
+                  <el-descriptions-item label="截图能力"><el-tag size="mini" :type="capabilities.capture ? 'success' : 'info'">{{ capabilities.capture ? '可用' : '不可用' }}</el-tag></el-descriptions-item>
+                  <el-descriptions-item label="流程能力"><el-tag size="mini" :type="capabilities.workflow ? 'success' : 'info'">{{ capabilities.workflow ? '可用' : '不可用' }}</el-tag></el-descriptions-item>
+                </el-descriptions>
+              </el-card>
+            </div>
+          </section>
+
+          <section v-else-if="activePage === 'templates'" class="forge-page">
+            <div class="forge-command">
+              <div>
+                <p class="forge-kicker">template forge</p>
+                <h2 class="forge-title">模板管理铸造台</h2>
+              </div>
+              <div class="forge-stats">
+                <div class="forge-stat"><strong>{{ filteredTemplates.length }}</strong><span>Visible</span></div>
+                <div class="forge-stat"><strong>{{ templateGroups.length }}</strong><span>Groups</span></div>
+                <div class="forge-stat"><strong>{{ selectedGroupLabel }}</strong><span>Selected</span></div>
+                <div class="forge-stat"><strong>{{ lastAction || '--' }}</strong><span>Last action</span></div>
+              </div>
+              <div class="toolbar-row" style="justify-content:flex-end;margin:0">
+                <el-button type="warning" size="small" :loading="captureLoading" @click="captureWindow">截图</el-button>
+                <el-button size="small" @click="refreshTemplates">刷新模板</el-button>
+              </div>
+            </div>
+
+            <div class="forge-workspace">
+              <el-card class="forge-card" shadow="never">
+                <div slot="header" class="card-title"><h3>截图预览</h3><span class="hint">保持真实像素尺寸</span></div>
+                <div class="toolbar-row">
+                  <el-checkbox v-model="captureForm.bring_to_front">截图前激活</el-checkbox>
+                  <el-select v-model="captureForm.backend" size="small" style="width:130px">
+                    <el-option label="auto" value="auto"></el-option>
+                    <el-option label="window" value="window"></el-option>
+                    <el-option label="desktop" value="desktop"></el-option>
+                    <el-option label="dm" value="dm"></el-option>
+                  </el-select>
+                </div>
+                <div class="capture-stage">
+                  <img v-if="capture.path" class="capture-preview" :src="imagePreviewUrl(capture.path)" alt="截图预览">
+                  <el-empty v-else description="点击“截图”后在这里显示客户区截图"></el-empty>
+                </div>
+              </el-card>
+
+              <el-card class="forge-card" shadow="never">
+                <div slot="header" class="card-title"><h3>分组</h3></div>
+                <el-select v-model="selectedGroup" filterable size="small" style="width:100%;margin-bottom:10px">
+                  <el-option label="全部分组" value="__all__"></el-option>
+                  <el-option label="root" value=""></el-option>
+                  <el-option v-for="group in templateGroups" :key="group.name" :label="`${group.name} (${group.count || 0})`" :value="group.name"></el-option>
+                </el-select>
+                <p class="hint">脚手架先提供模板浏览和筛选；裁剪、圈选、模板动作编辑将在后续组件化迁移。</p>
+              </el-card>
+
+              <el-card class="forge-card" shadow="never">
+                <div slot="header" class="card-title"><h3>模板库</h3><el-tag size="mini" type="warning">{{ filteredTemplates.length }}</el-tag></div>
+                <div class="template-list">
+                  <div v-for="template in filteredTemplates" :key="template.relative_path || template.path" class="template-row">
+                    <div style="min-width:0">
+                      <div class="template-name">{{ templateName(template) }}</div>
+                      <div class="template-meta">{{ template.group || '(root)' }} · {{ template.width || '?' }}x{{ template.height || '?' }}</div>
+                    </div>
+                    <el-button size="mini" @click="selectedTemplate = template">查看</el-button>
+                  </div>
+                  <el-empty v-if="!filteredTemplates.length" description="没有模板"></el-empty>
+                </div>
+              </el-card>
+
+              <el-card class="forge-card span-main" shadow="never">
+                <div slot="header" class="card-title"><h3>模板详情</h3></div>
+                <template v-if="selectedTemplate">
+                  <el-row :gutter="12">
+                    <el-col :span="10">
+                      <div class="capture-stage" style="min-height:180px;max-height:300px">
+                        <img class="capture-preview" :src="templatePreviewUrl(selectedTemplate.relative_path || selectedTemplate.path)" alt="模板预览">
+                      </div>
+                    </el-col>
+                    <el-col :span="14">
+                      <pre class="mono">{{ selectedTemplateText }}</pre>
+                    </el-col>
+                  </el-row>
+                </template>
+                <el-empty v-else description="选择一个模板查看详情"></el-empty>
+              </el-card>
+            </div>
+          </section>
+
+          <section v-else-if="activePage === 'flows'">
+            <div class="toolbar-row">
+              <el-button type="primary" size="small" icon="el-icon-plus" @click="newFlowDraft">新建配置</el-button>
+              <el-button size="small" icon="el-icon-refresh" @click="refreshFlows">刷新</el-button>
+              <el-checkbox v-model="flowDryRun">dry run</el-checkbox>
+            </div>
+            <div class="flow-layout">
+              <el-card shadow="never" class="section-card">
+                <div slot="header" class="card-title"><h3>状态流程</h3><el-tag size="mini">{{ flows.length }}</el-tag></div>
+                <div class="flow-list">
+                  <div v-for="flow in flows" :key="flow.filename" class="flow-item" :class="{ active: selectedFlowFilename === flow.filename }" @click="selectFlow(flow.filename)">
+                    <div class="flow-name"><span>{{ flow.filename }}</span><el-tag size="mini" :type="flow.running ? 'success' : 'info'">{{ flow.running ? '运行中' : '停止' }}</el-tag></div>
+                    <div class="flow-meta">{{ (flow.loop_dirs || []).join(', ') || '未设置循环目录' }}</div>
+                  </div>
+                  <el-empty v-if="!flows.length" description="没有状态流程"></el-empty>
+                </div>
+              </el-card>
+
+              <el-card shadow="never" class="section-card">
+                <div slot="header" class="card-title"><h3>流程表单</h3><span class="hint">保存到 state_scripts/*.yaml</span></div>
+                <el-form label-position="top" size="small">
+                  <el-form-item label="文件名">
+                    <el-input v-model="flowDraft.filename" placeholder="如 world_boss.yaml"></el-input>
+                  </el-form-item>
+                  <el-form-item label="入口状态流程">
+                    <el-select v-model="flowDraft.start" multiple filterable style="width:100%" placeholder="可选">
+                      <el-option v-for="flow in flows" :key="flow.filename" :label="flow.filename" :value="flow.id || flow.filename.replace(/\.(ya?ml)$/i, '')"></el-option>
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="循环模板目录">
+                    <el-select v-model="flowDraft.loopDir" multiple filterable style="width:100%" placeholder="选择模板分组">
+                      <el-option v-for="group in templateGroups" :key="group.name" :label="group.name" :value="group.name"></el-option>
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="结束模板">
+                    <el-select v-model="flowDraft.end" filterable clearable style="width:100%" placeholder="可选">
+                      <el-option v-for="template in templates" :key="template.relative_path || template.path" :label="template.relative_path || template.path" :value="template.relative_path || template.path"></el-option>
+                    </el-select>
+                  </el-form-item>
+                  <div class="toolbar-row">
+                    <el-button type="primary" :loading="flowSaving" @click="saveFlow">保存</el-button>
+                    <el-button type="success" :loading="flowStarting" @click="startFlow">保存并启动</el-button>
+                    <el-button type="danger" plain @click="stopFlow">停止</el-button>
+                  </div>
+                </el-form>
+              </el-card>
+
+              <el-card shadow="never" class="section-card span-main">
+                <div slot="header" class="card-title"><h3>YAML 预览 / 日志</h3><el-button size="mini" @click="loadFlowLog">读取日志</el-button></div>
+                <h4>预览</h4>
+                <pre class="yaml-preview mono">{{ flowYamlPreview }}</pre>
+                <h4>日志</h4>
+                <pre class="log-box mono">{{ flowLog || '尚未读取日志。' }}</pre>
+              </el-card>
+            </div>
+          </section>
+
+          <section v-else-if="activePage === 'window'">
+            <div class="content-grid">
+              <el-card shadow="never" class="section-card">
+                <div slot="header" class="card-title"><h3>窗口查找</h3></div>
+                <el-form label-position="top" size="small">
+                  <el-form-item label="窗口标题包含">
+                    <el-input v-model="windowFind.title" placeholder="留空则使用配置"></el-input>
+                  </el-form-item>
+                  <el-form-item label="进程名">
+                    <el-input v-model="windowFind.process_name" placeholder="可选"></el-input>
+                  </el-form-item>
+                  <div class="toolbar-row">
+                    <el-button type="primary" @click="findWindow">查找窗口</el-button>
+                    <el-button @click="focusWindow">激活</el-button>
+                    <el-button @click="setTopmost(true)">置顶</el-button>
+                    <el-button @click="setTopmost(false)">取消置顶</el-button>
+                  </div>
+                </el-form>
+              </el-card>
+              <el-card shadow="never" class="section-card">
+                <div slot="header" class="card-title"><h3>窗口信息</h3></div>
+                <pre class="mono">{{ windowInfoText }}</pre>
+              </el-card>
+            </div>
+          </section>
+        </el-main>
+      </el-container>
+    </el-container>
+  </div>
+
+  <script>
+    const apiAvailable = location.protocol !== "file:";
+
+    new Vue({
+      el: "#app",
+      data() {
+        return {
+          activePage: "dashboard",
+          apiAvailable,
+          bootstrapping: false,
+          statusText: apiAvailable ? "正在连接 HTML 工作台服务..." : "file:// 模式仅显示脚手架，无法调用本地 API。",
+          lastAction: "",
+          capabilities: { window: false, workflow: false, capture: false, template: false },
+          settings: {},
+          templates: [],
+          templateGroups: [],
+          flows: [],
+          windowInfo: null,
+          startupError: "",
+          selectedGroup: "__all__",
+          selectedTemplate: null,
+          captureLoading: false,
+          captureForm: { bring_to_front: false, backend: "auto" },
+          capture: {},
+          selectedFlowFilename: "",
+          flowDryRun: false,
+          flowSaving: false,
+          flowStarting: false,
+          flowLog: "",
+          flowDraft: { filename: "", start: [], loopDir: [], end: "" },
+          windowFind: { title: "", process_name: "" }
+        };
+      },
+      computed: {
+        pageTitle() {
+          return {
+            dashboard: "新版工作台总览",
+            templates: "模板 / 截图",
+            flows: "状态流程",
+            window: "窗口工具"
+          }[this.activePage] || "Monster Job";
+        },
+        windowSizeText() {
+          const size = this.settings?.game?.window_size || this.settings?.window_size || {};
+          if (size.width && size.height) return `窗口 ${size.width}x${size.height}`;
+          return "窗口尺寸读取中";
+        },
+        filteredTemplates() {
+          if (this.selectedGroup === "__all__") return this.templates;
+          return this.templates.filter(item => (item.group || "") === this.selectedGroup);
+        },
+        selectedGroupLabel() {
+          if (this.selectedGroup === "__all__") return "All";
+          return this.selectedGroup || "root";
+        },
+        selectedTemplateText() {
+          return JSON.stringify(this.selectedTemplate || {}, null, 2);
+        },
+        selectedFlow() {
+          return this.flows.find(flow => flow.filename === this.selectedFlowFilename) || null;
+        },
+        flowYamlPreview() {
+          const lines = [];
+          lines.push("start_flows:");
+          if (this.flowDraft.start.length) this.flowDraft.start.forEach(name => lines.push(`  - ${name}`));
+          else lines.push("  []");
+          lines.push("loop_dirs:");
+          if (this.flowDraft.loopDir.length) this.flowDraft.loopDir.forEach(name => lines.push(`  - ${name}`));
+          else lines.push("  []");
+          if (this.flowDraft.end) lines.push(`end_template: ${this.flowDraft.end}`);
+          return lines.join("\n");
+        },
+        windowInfoText() {
+          return this.windowInfo ? JSON.stringify(this.windowInfo, null, 2) : "尚未选择窗口。";
+        }
+      },
+      mounted() {
+        this.bootstrap();
+      },
+      methods: {
+        async apiGet(path) {
+          const response = await fetch(path, { cache: "no-store" });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          return payload;
+        },
+        async apiPost(path, body = {}) {
+          const response = await fetch(path, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+          return payload;
+        },
+        async guardApi() {
+          if (!this.apiAvailable) throw new Error("请通过 tools/window_workbench.py 启动页面，而不是直接 file:// 打开。");
+        },
+        async bootstrap() {
+          if (!this.apiAvailable) return;
+          this.bootstrapping = true;
+          try {
+            const payload = await this.apiGet("/api/bootstrap");
+            this.capabilities = payload.capabilities || this.capabilities;
+            this.settings = payload.settings || {};
+            this.templates = payload.templates || [];
+            this.templateGroups = payload.template_groups || [];
+            this.flows = payload.template_loop_flows || [];
+            this.windowInfo = payload.window || null;
+            this.startupError = payload.startup?.error || "";
+            this.statusText = this.windowInfo ? `已连接，游戏窗口：${this.windowInfo.title}` : (this.startupError ? `已连接，但窗口未准备：${this.startupError}` : "已连接本地工作台 API。");
+          } catch (error) {
+            this.notifyError(error);
+            this.statusText = `连接失败：${error.message || error}`;
+          } finally {
+            this.bootstrapping = false;
+          }
+        },
+        async refreshTemplates() {
+          await this.guardApi();
+          const payload = await this.apiGet("/api/templates");
+          this.templates = payload.templates || [];
+          this.templateGroups = payload.template_groups || [];
+          this.lastAction = "刷新模板";
+        },
+        async refreshFlows() {
+          await this.guardApi();
+          const payload = await this.apiGet("/api/template-loop-flows");
+          this.flows = payload.flows || [];
+          this.lastAction = "刷新流程";
+        },
+        async captureWindow() {
+          await this.guardApi();
+          this.captureLoading = true;
+          try {
+            const payload = await this.apiPost("/api/capture", this.captureForm);
+            this.capture = payload.capture || {};
+            this.lastAction = "截图";
+            this.$message.success("截图完成");
+          } catch (error) {
+            this.notifyError(error);
+          } finally {
+            this.captureLoading = false;
+          }
+        },
+        imagePreviewUrl(path) {
+          return `/api/image-preview?path=${encodeURIComponent(path)}&t=${Date.now()}`;
+        },
+        templatePreviewUrl(path) {
+          return `/api/template-preview?path=${encodeURIComponent(path)}&t=${Date.now()}`;
+        },
+        templateName(template) {
+          const value = template.relative_path || template.path || "";
+          return value.split(/[\\/]/).pop() || value || "(unknown)";
+        },
+        newFlowDraft() {
+          this.selectedFlowFilename = "";
+          this.flowLog = "";
+          this.flowDraft = { filename: "", start: [], loopDir: [], end: "" };
+        },
+        async selectFlow(filename) {
+          this.selectedFlowFilename = filename;
+          this.flowLog = "";
+          try {
+            const payload = await this.apiGet(`/api/template-loop-flows/${encodeURIComponent(filename)}`);
+            const flow = payload.flow || {};
+            this.flowDraft = {
+              filename: flow.filename || filename,
+              start: flow.start_flows || flow.start || [],
+              loopDir: flow.loop_dirs || flow.loopDir || [],
+              end: flow.end_template || flow.end || ""
+            };
+          } catch (error) {
+            this.notifyError(error);
+          }
+        },
+        async saveFlow() {
+          await this.guardApi();
+          if (!this.flowDraft.filename) {
+            this.$message.warning("请填写流程文件名。");
+            return null;
+          }
+          this.flowSaving = true;
+          try {
+            const payload = await this.apiPost("/api/template-loop-flows", this.flowDraftPayload());
+            this.flows = payload.flows || this.flows;
+            this.selectedFlowFilename = payload.flow?.filename || this.flowDraft.filename;
+            this.lastAction = "保存流程";
+            this.$message.success("流程已保存");
+            return payload.flow;
+          } catch (error) {
+            this.notifyError(error);
+            return null;
+          } finally {
+            this.flowSaving = false;
+          }
+        },
+        async startFlow() {
+          const flow = await this.saveFlow();
+          if (!flow) return;
+          this.flowStarting = true;
+          try {
+            const filename = flow.filename || this.flowDraft.filename;
+            const payload = await this.apiPost(`/api/template-loop-flows/${encodeURIComponent(filename)}/start`, { dry_run: this.flowDryRun, background_mode: true });
+            this.flows = payload.flows || this.flows;
+            this.lastAction = "启动流程";
+            this.$message.success("流程已启动");
+          } catch (error) {
+            this.notifyError(error);
+          } finally {
+            this.flowStarting = false;
+          }
+        },
+        async stopFlow() {
+          await this.guardApi();
+          const filename = this.selectedFlowFilename || this.flowDraft.filename;
+          if (!filename) {
+            this.$message.warning("请先选择流程。");
+            return;
+          }
+          try {
+            const payload = await this.apiPost(`/api/template-loop-flows/${encodeURIComponent(filename)}/stop`, {});
+            this.flows = payload.flows || this.flows;
+            this.lastAction = "停止流程";
+            this.$message.success("流程已停止");
+          } catch (error) {
+            this.notifyError(error);
+          }
+        },
+        async loadFlowLog() {
+          await this.guardApi();
+          const filename = this.selectedFlowFilename || this.flowDraft.filename;
+          if (!filename) {
+            this.$message.warning("请先选择流程。");
+            return;
+          }
+          try {
+            const payload = await this.apiGet(`/api/template-loop-flows/${encodeURIComponent(filename)}/logs?max_chars=20000`);
+            this.flowLog = payload.log || "";
+          } catch (error) {
+            this.notifyError(error);
+          }
+        },
+        flowDraftPayload() {
+          return {
+            filename: this.flowDraft.filename,
+            start_flows: this.flowDraft.start || [],
+            loopDir: this.flowDraft.loopDir || [],
+            end: this.flowDraft.end || ""
+          };
+        },
+        async findWindow() {
+          await this.guardApi();
+          try {
+            const payload = await this.apiPost("/api/window/find", this.windowFind);
+            this.windowInfo = payload.window || null;
+            this.$message.success("已找到窗口");
+          } catch (error) {
+            this.notifyError(error);
+          }
+        },
+        async focusWindow() {
+          await this.guardApi();
+          try {
+            const payload = await this.apiPost("/api/window/focus", {});
+            this.windowInfo = payload.window || this.windowInfo;
+            this.$message.success("已激活窗口");
+          } catch (error) {
+            this.notifyError(error);
+          }
+        },
+        async setTopmost(enabled) {
+          await this.guardApi();
+          try {
+            const payload = await this.apiPost("/api/window/topmost", { enabled });
+            this.windowInfo = payload.window || this.windowInfo;
+            this.$message.success(enabled ? "已置顶" : "已取消置顶");
+          } catch (error) {
+            this.notifyError(error);
+          }
+        },
+        notifyError(error) {
+          const message = error?.message || String(error);
+          this.$message.error(message);
+          console.error(error);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
