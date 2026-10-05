@@ -122,3 +122,4 @@ Windows 将 `.venv/bin/python` 换成 `.\.venv\Scripts\python.exe`。`requiremen
 输入可受设备页面刷新影响；仅适用于可控测试设备及已确认页面。同 State 动作抑制是连续命中保护，不提供业务幂等保证。超时/取消在动作边界生效，最坏要等待当前 ADB 调用超时（默认 10 秒）。每轮证据都保存到磁盘，长时间使用需自行归档或清理运行目录；首版尚未实现自动保留策略。
 
 下一步：选一条供应链小程序及一条 POS 用例验证 → 逐步补有序流程和业务断言。
+Windows 测试机可双击 `start-windows.cmd` 启动，首次准备和参数说明见 [Windows 部署指南](docs/windows-deployment.md)。发布部署包带前端构建；从源码启动需 Node.js LTS。
