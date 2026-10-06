@@ -2,6 +2,12 @@
 
 ### 启动
 
+一键启动前后端：Mac 双击根目录 `start-macos.command`，或在项目目录执行 `bash ./start.sh`；Windows 双击 `start-windows.cmd`。启动成功后访问 http://127.0.0.1:8765，无需另开前端终端。Ctrl+C 停止服务。
+
+首次启动会创建 `.venv`、安装锁定依赖并构建前端；需要标准 Python 3.14 64 位、ADB，以及 Node.js LTS（部署包已有匹配的前端构建时无需 Node）。首次安装需要联网，后续复用已有环境和构建。将 Android platform-tools 解压到项目的 `platform-tools` 目录，或将 adb 加入 PATH；也可指定 `bash ./start.sh --adb "/路径/platform-tools/adb"`。
+
+命令入口支持 `--no-ocr`（仅图片模式）、`--port 8766`、`--ocr-config ocr.local.json`、`--setup-only`（只准备环境）、`--refresh`（重装依赖/重建）。`--no-ocr` 只关闭运行时 OCR，仍安装完整锁定依赖，平台支持要求同下文。Mac 若提示脚本没有执行权限，执行 `chmod +x start-macos.command start.sh`；若系统阻止打开，请在 Finder 中右键打开并按系统提示确认。程序不会自动安装系统 Python/Node/ADB。
+
 Windows 使用根目录 `start-windows.cmd`，部署步骤见 windows-deployment.md。源码前端构建为 `npm ci`、`npm run build`，构建后由后端同时提供页面和 API：http://127.0.0.1:8765。
 
 Mac/Linux 前后端开发分别启动：

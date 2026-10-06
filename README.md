@@ -21,6 +21,8 @@ SCM-581 的安卓 State 自动化工作台，支持通过截图制作图片或�
 
 ## 启动
 
+一键启动：Mac 双击 `start-macos.command`，Mac/Linux 执行 `bash ./start.sh`，Windows 双击 `start-windows.cmd`。自动准备 Python 环境和前端构建，随后在 http://127.0.0.1:8765 同时提供页面与 API；Ctrl+C 停止。首次运行需标准 Python 3.14 64 位、ADB 和 Node.js LTS（预构建部署包可省 Node），详见 [启动及使用说明](docs/workbench-usage.md)。
+
 确保 PATH 中 `python` 指向 **64 位 Python**，ADB 已安装并能列出目标设备。后端入口会拒绝 32 位解释器。
 
 ```bash
