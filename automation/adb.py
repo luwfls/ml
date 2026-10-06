@@ -42,7 +42,14 @@ class AdbDevice:
             if match.get('ambiguous') or not match.get('found') or not match.get('bbox'):
                 raise RuntimeError('点击需要唯一、有效的识别框')
             left, top, right, bottom = match['bbox']
-            x, y = int((left + right) / 2), int((top + bottom) / 2)
+            if 'target_box' in action:
+                from .state import validate_state
+                validate_state({'id': 'target', 'recognition': {'type': 'image', 'asset': 'target.png'}, 'actions': [action]})
+                a, b, c, d = action['target_box']
+                x = int(left + (a + c) / 2 * (right - left))
+                y = int(top + (b + d) / 2 * (bottom - top))
+            else:
+                x, y = int((left + right) / 2), int((top + bottom) / 2)
             if not 0 <= x < width or not 0 <= y < height:
                 raise RuntimeError('点击坐标越界')
             self.run('shell', 'input', 'tap', x, y)

@@ -26,16 +26,70 @@ def validate_flow(flow, states):
     return known
 
 
-def run_loop(states, flow, device, matcher, cancel=None, emit=None):
+class RunControl:
+    def __init__(self, cancel, notify):
+        self.cancel = cancel
+        self.notify = notify
+        self.condition = threading.Condition()
+        self.requested = False
+        self.paused = False
+
+    def pause(self):
+        with self.condition:
+            if self.requested: return
+            self.requested = True
+            self.notify('pausing')
+            self.condition.notify_all()
+
+    def resume(self):
+        with self.condition:
+            if not self.paused:
+                raise ValueError('只有仍在运行的用户暂停可以继续')
+            self.requested = False
+            self.condition.notify_all()
+
+    def checkpoint(self):
+        with self.condition:
+            if not self.requested or self.cancel.is_set(): return 0
+            started = time.monotonic()
+            self.paused = True
+            self.notify('paused')
+            while self.requested and not self.cancel.is_set():
+                self.condition.wait(.02)
+            self.paused = False
+            if not self.cancel.is_set(): self.notify('running')
+            return time.monotonic() - started
+
+
+def run_loop(states, flow, device, matcher, cancel=None, emit=None, control=None):
     cancel = cancel or threading.Event()
     emit = emit or (lambda event: None)
     states = [validate_state(s) for s in states]
     known = validate_flow(flow, states)
     candidates = sorted([known[s] for s in set(flow['state_ids'])], key=lambda s: (-s['priority'], s['id']))
     deadline = time.monotonic() + flow.get('timeout_seconds', 300)
+    def checkpoint():
+        nonlocal deadline
+        if control is not None:
+            duration = control.checkpoint()
+            deadline += duration
+            return duration > 0
+        return False
+
+    def wait(seconds):
+        remaining = seconds
+        while remaining > 0 and not cancel.is_set():
+            checkpoint()
+            started = time.monotonic()
+            cancel.wait(min(.02, remaining, max(0, deadline - started)))
+            remaining -= time.monotonic() - started
+            if time.monotonic() >= deadline: break
+
     count, previous_success, last_action = 0, False, None
     result = {'status': 'failed', 'reason': 'max_rounds', 'success_count': 0, 'dry_run': bool(flow.get('dry_run', False))}
-    for round_index in range(flow.get('max_rounds', 200)):
+    round_index = 0
+    while round_index < flow.get('max_rounds', 200):
+        checkpoint()
         if cancel.is_set():
             result.update(status='cancelled', reason='user_cancelled')
             break
@@ -53,6 +107,8 @@ def run_loop(states, flow, device, matcher, cancel=None, emit=None):
             emit({'type': 'probe', 'round': round_index + 1, 'state_id': state['id'], 'eligible': eligible, **match})
             if eligible:
                 hits.append((state, match))
+        if checkpoint(): continue
+        if cancel.is_set(): break
         if time.monotonic() >= deadline:
             result['reason'] = 'timeout'
             break
@@ -80,16 +136,22 @@ def run_loop(states, flow, device, matcher, cancel=None, emit=None):
             if match.get('ambiguous') and any(a['type'] == 'click_match' for a in state['actions']):
                 result.update(status='paused', reason='ambiguous_match')
                 break
+            restart = False
             for action in state['actions']:
+                if checkpoint() and action['type'] != 'wait':
+                    restart = True
+                    break
                 if cancel.is_set() or time.monotonic() >= deadline:
                     break
                 emit({'type': 'action', 'state_id': state['id'], 'action': action, 'bbox': match['bbox']})
                 if action['type'] == 'wait':
-                    cancel.wait(min(action.get('ms', 500) / 1000, max(0, deadline - time.monotonic())))
+                    wait(min(action.get('ms', 500) / 1000, max(0, deadline - time.monotonic())))
                 elif not flow.get('dry_run', False):
                     device.execute(action, match, frame)
+            if restart: continue
         last_action = action_state
-        cancel.wait(min(flow.get('poll_ms', 1000) / 1000, max(0, deadline - time.monotonic())))
+        round_index += 1
+        wait(min(flow.get('poll_ms', 1000) / 1000, max(0, deadline - time.monotonic())))
     if cancel.is_set():
         result.update(status='cancelled', reason='user_cancelled')
     emit({'type': 'result', **result})

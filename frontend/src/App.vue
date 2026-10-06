@@ -1,107 +1,76 @@
 <template>
-  <main>
-    <h1>安卓 State 自动化工作台</h1>
-    <p>选择设备、截图制作图片或文字 State，再运行有限循环。OCR：{{ ocrReady ? 'RapidOCR 已启用' : '未启用（仅图片模式）' }}。</p>
-    <el-alert v-if="error" :title="error" type="error" @close="error = ''" />
-    <el-card>
-      <el-select v-model="serial" placeholder="选择 ADB 设备">
-        <el-option v-for="d in devices" :key="d.serial" :label="d.serial + ' · ' + d.status" :value="d.serial" :disabled="d.status !== 'device'" />
-      </el-select>
-      <el-button @click="refreshDevices">刷新设备</el-button>
-      <el-button type="primary" :disabled="!serial || running" @click="capture">设备截图</el-button>
-      <input type="file" accept="image/png" @change="importImage" />
-      <p>在截图上拖动框选。坐标按原始截图像素保存；导入图片可用于离线制作和预览。</p>
-      <canvas ref="canvas" @mousedown="beginSelection" @mouseup="endSelection" />
-      <p v-if="box.length">框选区域：{{ box.join(', ') }}</p>
-    </el-card>
-    <div class="columns">
-      <el-card>
-        <h2>State 编辑</h2>
-        <el-form label-width="80px">
-          <el-form-item label="ID"><el-input v-model="editor.id" placeholder="例如 receive-success" /></el-form-item>
-          <el-form-item label="名称"><el-input v-model="editor.name" /></el-form-item>
-          <el-form-item label="角色"><el-select v-model="editor.role"><el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" /></el-select></el-form-item>
-          <el-form-item label="识别"><el-radio-group v-model="recognitionType"><el-radio label="image">图片</el-radio><el-radio label="text">文字</el-radio></el-radio-group></el-form-item>
-          <template v-if="recognitionType === 'image'">
-            <el-form-item label="资源"><el-input v-model="asset" /><el-button :disabled="!box.length || !captureId || running" @click="crop">保存框选图片</el-button></el-form-item>
-          </template>
-          <template v-else>
-            <el-form-item label="文案"><el-input v-model="texts" type="textarea" placeholder="每行一个候选文案，任一命中即识别成功" /></el-form-item>
-            <el-form-item label="模式"><el-select v-model="textMode"><el-option v-for="m in ['exact', 'contains', 'fuzzy']" :key="m" :value="m" :label="m" /></el-select></el-form-item>
-          </template>
-          <el-form-item label="优先级"><el-input-number v-model="editor.priority" :min="-10000" :max="10000" /></el-form-item>
-          <el-form-item label="动作"><el-input v-model="actions" type="textarea" :rows="3" /><small>[] 只识别；点击需显式填写 [{"type":"click_match"}]。</small></el-form-item>
-        </el-form>
-        <el-button type="primary" :disabled="running" @click="saveState">保存 State</el-button>
-        <el-button :disabled="!captureId || (recognitionType === 'text' && !ocrReady)" @click="preview">识别预览</el-button>
-        <pre v-if="probe">{{ JSON.stringify(probe, null, 2) }}</pre>
-      </el-card>
-      <el-card>
-        <h2>State 与流程</h2>
-        <el-checkbox-group v-model="selected"><p v-for="s in states" :key="s.id"><el-checkbox :label="s.id">{{ s.name }} · {{ s.role }} · {{ s.recognition.type }}</el-checkbox><el-button size="mini" @click="editState(s)">编辑</el-button></p></el-checkbox-group>
-        <el-form label-width="100px">
-          <el-form-item label="最多轮数"><el-input-number v-model="flow.max_rounds" :min="1" :max="10000" /></el-form-item>
-          <el-form-item label="超时（秒）"><el-input-number v-model="flow.timeout_seconds" :min="1" :max="3600" /></el-form-item>
-          <el-form-item label="轮间等待 ms"><el-input-number v-model="flow.poll_ms" :min="0" :max="10000" /></el-form-item>
-          <el-form-item label="完成次数"><el-input-number v-model="flow.completion_count" :min="1" :max="1000" /></el-form-item>
-          <el-form-item label="只识别"><el-switch v-model="flow.dry_run" /></el-form-item>
-        </el-form>
-        <el-button :disabled="running" @click="saveFlow">保存流程</el-button>
-        <el-button type="primary" :disabled="!serial || running" @click="run">运行流程</el-button>
-        <el-button type="danger" :disabled="!running" @click="cancel">停止</el-button>
-        <p v-if="runData">状态：{{ runData.status }} · {{ runData.reason || '' }} <strong v-if="runData.dry_run">（仅识别，未发送输入）</strong></p>
-        <pre v-if="runData">{{ JSON.stringify(runData.events || [], null, 2) }}</pre>
-      </el-card>
+  <main class="workbench">
+    <aside class="sidebar"><h1>State 自动化</h1><p>安卓设备工作台</p><button :class="{active:page==='states'}" @click="page='states'">State 制作</button><button :class="{active:page==='flows'}" @click="page='flows'">循环流程</button></aside>
+    <div class="main-content"><header class="toolbar"><el-select v-model="serial" placeholder="选择 ADB 设备"><el-option v-for="d in devices" :key="d.serial" :label="d.serial+' · '+d.status" :value="d.serial" :disabled="d.status!=='device'" /></el-select><el-button size="small" @click="refreshDevices">刷新设备</el-button><el-tag :type="apiReady?'success':'danger'">API {{ apiReady?'在线':'未连接' }}</el-tag><el-tag :type="ocrReady?'success':'info'">OCR {{ ocrReady?'RapidOCR 已启用':'未启用（可制作图片）' }}</el-tag></header>
+      <el-alert v-if="error" :title="error" type="error" show-icon @close="error=''" />
+      <el-alert v-if="locked" title="存在活动运行，State、分组、流程配置暂时锁定；请停止后编辑。" type="warning" :closable="false" />
+      <section v-show="page==='states'">
+        <div class="section-heading"><h2>State 制作</h2><el-button type="primary" :disabled="locked" @click="openState()">新建 State</el-button></div>
+        <div class="group-bar"><button :class="{active:groupFilter==='*'}" @click="groupFilter='*'">全部 {{ states.length }}</button><button :class="{active:groupFilter===''}" @click="groupFilter=''">未分组 {{ groupCount('') }}</button><button v-for="g in groups" :key="g.name" :class="{active:groupFilter===g.name}" @click="groupFilter=g.name">{{ g.name }} {{ groupCount(g.name) }}</button><el-button size="small" :disabled="locked" @click="groupAction('create')">新建分组</el-button><template v-if="groupFilter&&groupFilter!=='*'"><el-button size="small" :disabled="locked" @click="groupAction('rename')">重命名</el-button><el-button size="small" :disabled="locked" @click="groupAction('copy')">复制分组</el-button><el-button size="small" :disabled="locked" @click="groupAction('delete')">删除空分组</el-button></template></div>
+        <el-input v-model="stateSearch" placeholder="筛选名称 / ID / 文案" clearable class="search" />
+        <div class="state-cards"><button v-for="s in filteredStates" :key="s.id" class="state-card" @click="openState(s)"><img v-if="s.recognition.type==='image'" :src="'/assets/'+s.recognition.asset" :alt="s.name" /><div v-else class="text-thumbnail">{{ (s.recognition.texts||[]).join(' / ') }}</div><strong>{{ s.name }}</strong><small>{{ s.id }} · {{ s.role }} · 优先级 {{ s.priority }}</small><span class="flow-label">{{ flowLabels(s.id) || '未加入流程' }}</span></button><p v-if="!filteredStates.length" class="hint">暂无 State，截图框选后保存或新建文字 State。</p></div>
+        <el-card><div class="section-heading"><h2>截图工作台</h2><div class="button-row"><el-button type="primary" :disabled="!serial||locked" @click="capture">设备截图 F1</el-button><label class="import-button" :class="{disabled:locked}">导入 PNG<input type="file" accept="image/png" :disabled="locked" @change="importImage" /></label></div></div>
+          <div class="button-row"><el-button size="small" :disabled="!captureId" @click="selectMode('recognition')">框选识别区 F2</el-button><el-button size="small" :disabled="!captureId" @click="selectMode('click')">框选点击区 F3</el-button><el-button size="small" :disabled="locked||!drawer" @click="saveCurrentState">保存 State F4</el-button><el-button size="small" type="warning" :disabled="locked||!serial||!editor.original.id" @click="execute">执行当前 State F5</el-button><el-button size="small" :disabled="!captureId||!filteredStates.length" @click="previewGroup">当前分组预览 F6</el-button></div>
+          <capture-canvas ref="capture" :url="captureUrl" :matches="matches" @selection="selection=$event" @error="error=$event" />
+          <div v-if="probe" class="preview-results"><h3>识别结果（未执行动作）</h3><div v-for="(m,i) in matches" :key="i" class="result-row"><strong>{{ m.state_id || editor.id }}</strong><el-tag :type="m.found&&!m.ambiguous&&m.eligible!==false?'success':'warning'">{{ m.ambiguous?'歧义':m.found?'命中':'未命中' }}</el-tag><span>得分 {{ m.score ?? '-' }} · {{ conditionLabel(m) }} · 坐标 {{ (m.bbox||[]).join(', ') }}</span></div><el-collapse><el-collapse-item title="结果详情"><pre>{{ JSON.stringify(probe,null,2) }}</pre></el-collapse-item></el-collapse></div>
+        </el-card>
+      </section>
+      <flow-panel v-if="page==='flows'" :flows="flows" :flow="flow" :states="states" :groups="groups" :locked="locked" :serial="serial" @new="newFlow" @select="selectFlow" @edit="openState" @save="saveCurrentFlow" @start="startFlow" @copy="copyFlow" @delete="deleteFlow" />
+      <run-panel :runs="runs" :run="runData" :run-id="runId" @refresh="refreshRuns" @select="selectRun" @control="controlRun" />
     </div>
+    <state-editor :visible="drawer" :editor="editor" :states="states" :groups="groups" :locked="locked" :serial="serial" :can-crop="canCrop" :can-r-o-i="canROI" :can-target="canCrop&&selection.click.length===4" :can-preview="!!captureId&&(editor.kind==='image'||ocrReady)" @close="drawer=false" @save="saveCurrentState" @crop="crop" @roi="applyROI" @target="applyTarget" @preview="preview" @execute="execute" @copy="copyState" @delete="deleteState" />
   </main>
 </template>
-
 <script>
-async function api(path, body) {
-  const response = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || '请求失败');
-  return data;
-}
-
+import CaptureCanvas from './components/CaptureCanvas.vue';
+import StateEditor from './components/StateEditor.vue';
+import FlowPanel from './components/FlowPanel.vue';
+import RunPanel from './components/RunPanel.vue';
+import {api,clone,editState,saveState,normalizedRegion,relativeTarget,liveStatuses,conditionLabel} from './model.js';
+const freshFlow=()=>({id:'',name:'',state_ids:[],max_rounds:200,timeout_seconds:300,poll_ms:1000,completion_count:1,dry_run:true});
 export default {
-  data: () => ({devices: [], serial: '', error: '', ocrReady: false, states: [], selected: [], captureId: '', image: null, start: null, box: [],
-    editor: {id: '', name: '', role: 'normal', priority: 0}, recognitionType: 'image', asset: '', texts: '', textMode: 'exact', actions: '[]', extras: {}, probe: null,
-    roles: [{value: 'normal', label: '普通'}, {value: 'success', label: '成功断言'}, {value: 'failure', label: '失败断言'}, {value: 'fallback', label: '兜底（须命中）'}],
-    flow: {max_rounds: 200, timeout_seconds: 300, poll_ms: 1000, completion_count: 1, dry_run: true}, runData: null, runId: '', timer: null}),
-  computed: {running() {return this.runData && this.runData.status === 'running';}},
-  mounted() {this.guard(async () => {this.ocrReady = (await api('/api/health')).ocr === 'ready'; this.states = await api('/api/states'); const f = await api('/api/flow'); if (f) {this.flow = f; this.selected = f.state_ids;} });},
-  beforeDestroy() {clearInterval(this.timer);},
-  methods: {
-    async guard(fn) {this.error = ''; try {await fn();} catch (e) {this.error = e.message;}},
-    refreshDevices() {this.guard(async () => {this.devices = await api('/api/devices');});},
-    capture() {this.guard(async () => {const c = await api('/api/capture', {serial: this.serial}); this.captureId = c.id; this.loadImage(c.url);});},
-    importImage(event) {this.guard(async () => {const file = event.target.files[0]; if (!file) return; const raw = new Uint8Array(await file.arrayBuffer()); let binary = ''; for (const byte of raw) binary += String.fromCharCode(byte); const c = await api('/api/import', {png: btoa(binary)}); this.captureId = c.id; this.loadImage(c.url);});},
-    loadImage(url) {this.box = []; const image = new Image(); image.onload = () => {this.image = image; this.draw();}; image.onerror = () => {this.error = '截图加载失败';}; image.src = url;},
-    draw() {const canvas = this.$refs.canvas; if (!this.image) return; canvas.width = this.image.width; canvas.height = this.image.height; const ctx = canvas.getContext('2d'); ctx.drawImage(this.image, 0, 0); if (this.box.length) {ctx.strokeStyle = '#e65c33'; ctx.lineWidth = 2; ctx.strokeRect(this.box[0], this.box[1], this.box[2] - this.box[0], this.box[3] - this.box[1]);}},
-    point(event) {const canvas = this.$refs.canvas, r = canvas.getBoundingClientRect(); return [Math.max(0, Math.min(canvas.width, Math.round((event.clientX-r.left)*canvas.width/r.width))), Math.max(0, Math.min(canvas.height, Math.round((event.clientY-r.top)*canvas.height/r.height)))];},
-    beginSelection(e) {if (this.image) this.start = this.point(e);},
-    endSelection(e) {if (!this.start) return; const p = this.point(e); this.box = [Math.min(p[0], this.start[0]), Math.min(p[1], this.start[1]), Math.max(p[0], this.start[0]), Math.max(p[1], this.start[1])]; this.start = null; this.draw();},
-    stateData() {return {...this.extras, ...this.editor, actions: JSON.parse(this.actions), recognition: this.recognitionType === 'image' ? {...(this.extras.recognition?.type === 'image' ? this.extras.recognition : {}), type: 'image', asset: this.asset} : {...(this.extras.recognition?.type === 'text' ? this.extras.recognition : {}), type: 'text', texts: this.texts.split('\n').map(s => s.trim()).filter(Boolean), mode: this.textMode}};},
-    crop() {this.guard(async () => {const result = await api('/api/crop', {capture_id: this.captureId, asset_id: this.editor.id, box: this.box}); this.asset = result.asset;});},
-    saveState() {this.guard(async () => {await api('/api/states', this.stateData()); this.states = await api('/api/states');});},
-    preview() {this.guard(async () => {this.probe = await api('/api/preview', {capture_id: this.captureId, state: this.stateData()});});},
-    editState(s) {this.extras = JSON.parse(JSON.stringify(s)); this.editor = {id: s.id, name: s.name, role: s.role, priority: s.priority}; this.recognitionType = s.recognition.type; this.asset = s.recognition.asset || ''; this.texts = (s.recognition.texts || []).join('\n'); this.textMode = s.recognition.mode || 'exact'; this.actions = JSON.stringify(s.actions, null, 2);},
-    saveFlow() {this.guard(async () => {this.flow = await api('/api/flow', {...this.flow, state_ids: this.selected});});},
-    run() {this.guard(async () => {const r = await api('/api/run', {serial: this.serial, flow: {...this.flow, state_ids: this.selected}}); this.runId = r.id; this.runData = {status: 'running'}; clearInterval(this.timer); this.timer = setInterval(() => this.poll(), 1000); await this.poll();});},
-    poll() {return this.guard(async () => {this.runData = await api('/api/runs/' + this.runId); if (!this.running) clearInterval(this.timer);});},
-    cancel() {this.guard(async () => {await api('/api/cancel', {id: this.runId});});},
-  },
+  components:{CaptureCanvas,StateEditor,FlowPanel,RunPanel},
+  data:()=>({page:'states',devices:[],serial:'',apiReady:false,ocrReady:false,error:'',states:[],groups:[],flows:[],runs:[],groupFilter:'*',stateSearch:'',drawer:false,editor:editState(),captureId:'',captureUrl:'',selection:{recognition:[],click:[],roi:[],size:[]},probe:null,matches:[],flow:freshFlow(),runId:'',runData:null,timer:null,polling:false,busy:false}),
+  computed:{locked(){return this.busy||this.runs.some(r=>r.live===true||(r.live===undefined&&liveStatuses.includes(r.status)))||this.runData?.live===true;},canCrop(){const b=this.selection.recognition;return !!this.captureId&&b.length===4&&b[2]>b[0]&&b[3]>b[1];},canROI(){return this.selection.roi.length===4;},filteredStates(){return this.states.filter(s=>(this.groupFilter==='*'||(s.group||'')===this.groupFilter)&&(s.name+' '+s.id+' '+(s.recognition.texts||[]).join(' ')).toLowerCase().includes(this.stateSearch.toLowerCase()));}},
+  mounted(){window.addEventListener('keydown',this.hotkey);this.guard(async()=>{const health=await api('/api/health');this.apiReady=true;this.ocrReady=health.ocr==='ready';await this.reloadCatalog();await this.refreshDevices();await this.refreshRuns();if(this.flows.length)this.flow=clone(this.flows[0]);});this.timer=setInterval(this.poll,1000);},
+  beforeDestroy(){window.removeEventListener('keydown',this.hotkey);clearInterval(this.timer);},
+  methods:{
+    conditionLabel,
+    async guard(fn){this.error='';try{return await fn();}catch(e){if(e!=='cancel'&&e!=='close')this.error=e.message||String(e);return null;}},
+    async reloadCatalog(){[this.states,this.groups,this.flows]=await Promise.all([api('/api/states'),api('/api/groups'),api('/api/flows')]);},
+    refreshDevices(){return this.guard(async()=>{this.devices=await api('/api/devices');});},
+    refreshRuns(){return this.guard(async()=>{this.runs=await api('/api/runs');});},
+    groupCount(name){return this.states.filter(s=>(s.group||'')===name).length;},flowLabels(id){return this.flows.filter(f=>(f.state_ids||[]).includes(id)).map(f=>f.name||f.id).join(' / ');},
+    openState(state){this.editor=editState(state||{group:this.groupFilter==='*'?'':this.groupFilter});this.drawer=true;},
+    selectMode(mode){this.page='states';this.$nextTick(()=>this.$refs.capture.setMode(mode));},
+    capture(){return this.guard(async()=>{if(this.locked||!this.serial)return;const c=await api('/api/capture',{serial:this.serial});this.setCapture(c);});},
+    importImage(event){return this.guard(async()=>{const file=event.target.files[0];event.target.value='';if(!file||this.locked)return;let binary='';for(const byte of new Uint8Array(await file.arrayBuffer()))binary+=String.fromCharCode(byte);this.setCapture(await api('/api/import',{png:btoa(binary)}));});},
+    setCapture(c){this.captureId=c.id;this.captureUrl=c.url;this.probe=null;this.matches=[];},
+    async cropAsset(editor=this.editor,selection=clone(this.selection),captureId=this.captureId){if(!editor.id)throw new Error('请先填写 State ID');const assetId=editor.id.slice(0,60)+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6);const r=await api('/api/crop',{capture_id:captureId,asset_id:assetId,box:selection.recognition});editor.asset=r.asset;},
+    crop(){return this.guard(async()=>{if(this.locked||this.busy||!this.canCrop)return;const editor=this.editor,selection=clone(this.selection),captureId=this.captureId;this.busy=true;try{await this.cropAsset(editor,selection,captureId);this.$message.success('识别区图片已保存');}finally{this.busy=false;}});},
+    applyROI(){return this.guard(async()=>{const box=this.selection.roi;if(box.length!==4||box[2]<=box[0]||box[3]<=box[1])throw new Error('请先框选有效 ROI');this.editor.region=normalizedRegion(box,this.selection.size);});},
+    applyTarget(){return this.guard(async()=>{if(this.locked||this.busy)return;const editor=this.editor,selection=clone(this.selection),captureId=this.captureId;if(editor.kind!=='image')throw new Error('独立点击区仅适用于图片 State');const action=editor.actions.find(a=>a.type==='click_match');if(!action)throw new Error('请选择点击匹配位置动作');const target=relativeTarget(selection.recognition,selection.click);this.busy=true;try{await this.cropAsset(editor,selection,captureId);this.$set(action,'target_box',target);}finally{this.busy=false;}});},
+    async persistState(){if(this.locked||this.busy)throw new Error('运行或保存期间不能修改 State');const origin=this.editor,draft=clone(origin),selection=clone(this.selection),captureId=this.captureId,canCrop=this.canCrop;this.busy=true;try{if(draft.kind==='image'&&!draft.asset&&canCrop)await this.cropAsset(draft,selection,captureId);const saved=await api('/api/states',saveState(draft));await this.reloadCatalog();if(this.editor===origin)this.editor=editState(saved);this.$message.success('State 已保存');return saved;}finally{this.busy=false;}},
+    saveCurrentState(){return this.guard(()=>this.persistState());},
+    preview(){return this.guard(async()=>{if(!this.captureId)return;this.probe=await api('/api/preview',{capture_id:this.captureId,state:saveState(this.editor)});this.matches=[this.probe];this.page='states';});},
+    previewGroup(){return this.guard(async()=>{if(!this.captureId)return;this.probe=await api('/api/preview-group',{capture_id:this.captureId,state_ids:this.filteredStates.map(s=>s.id)});this.matches=this.probe.matches;});},
+    execute(){return this.guard(async()=>{if(this.locked||!this.serial||!this.editor.original.id)return;await this.$confirm('将使用设备新截图及已保存的 State 执行动作。尚未保存的表单修改不会执行。是否继续？','确认设备输入',{type:'warning'});const result=await api('/api/execute',{serial:this.serial,state_id:this.editor.original.id});this.$message[result.executed?'success':'warning'](result.executed?'已执行保存的动作':'未执行：未命中、歧义或条件未满足');});},
+    copyState(state){return this.guard(async()=>{const {value}=await this.$prompt('新 State ID','复制 State');const saved=await api('/api/states/copy',{id:state.id,new_id:value,name:state.name+' 副本'});await this.reloadCatalog();this.openState(saved);});},
+    deleteState(state){return this.guard(async()=>{await this.$confirm('删除 '+state.name+'？被流程或条件引用的 State 无法删除。','删除 State',{type:'warning'});await api('/api/states/delete',{id:state.id});await this.reloadCatalog();this.drawer=false;this.$message.success('State 已删除');});},
+    groupAction(action){return this.guard(async()=>{const name=this.groupFilter;let body={action,name};if(action==='delete')await this.$confirm('删除空分组 '+name+'？非空分组不会被删除。','删除分组');else {const {value}=await this.$prompt('分组名称',action==='create'?'新建分组':action==='copy'?'复制分组':'重命名分组');body=action==='create'?{action,name:value}:{action,name,new_name:value};}await api('/api/groups',body);await this.reloadCatalog();if(action==='rename'){if(this.editor.group===name)this.editor.group=body.new_name;if(this.editor.original.group===name)this.editor.original.group=body.new_name;}this.groupFilter=action==='delete'?'*':body.new_name||body.name;this.$message.success('分组已更新');});},
+    newFlow(){if(!this.locked)this.flow=freshFlow();},selectFlow(flow){this.flow=clone(flow);},
+    async persistFlow(){if(this.locked||this.busy)throw new Error('运行或保存期间不能修改流程');const origin=this.flow,draft=clone(origin);this.busy=true;try{const saved=await api('/api/flows',draft);await this.reloadCatalog();if(this.flow===origin)this.flow=clone(saved);return saved;}finally{this.busy=false;}},
+    saveCurrentFlow(){return this.guard(async()=>{await this.persistFlow();this.$message.success('流程已保存');});},
+    startFlow(){return this.guard(async()=>{if(!this.serial||this.locked)return;if(!this.flow.dry_run)await this.$confirm('流程会向 '+this.serial+' 发送已配置的输入动作。确认启动？','启动循环',{type:'warning'});const saved=await this.persistFlow();const run=await api('/api/run',{serial:this.serial,flow:saved});this.runId=run.id;await this.refreshRuns();await this.pollDetail();});},
+    copyFlow(){return this.guard(async()=>{const {value}=await this.$prompt('新流程 ID','复制流程');const saved=await api('/api/flows/copy',{id:this.flow.id,new_id:value,name:this.flow.name+' 副本'});await this.reloadCatalog();this.flow=clone(saved);});},
+    deleteFlow(){return this.guard(async()=>{await this.$confirm('删除流程 '+this.flow.name+'？','删除流程',{type:'warning'});await api('/api/flows/delete',{id:this.flow.id});await this.reloadCatalog();this.flow=this.flows.length?clone(this.flows[0]):freshFlow();});},
+    selectRun(id){this.runId=id;this.runData=null;return this.guard(()=>this.pollDetail());},async pollDetail(){const id=this.runId;if(!id)return;const data=await api('/api/runs/'+encodeURIComponent(id));if(this.runId===id)this.runData=data;},
+    async poll(){if(this.polling)return;this.polling=true;try{if(this.runId)await this.pollDetail();if(this.runs.some(r=>r.live)||this.runData?.live) this.runs=await api('/api/runs');}catch(e){this.error=e.message;}finally{this.polling=false;}},
+    controlRun(action){return this.guard(async()=>{if(!this.runId||this.runData?.id!==this.runId)return;const id=this.runId;await api('/api/'+action,{id});await this.pollDetail();await this.refreshRuns();});},
+    hotkey(event){if(event.defaultPrevented||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey||['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)||event.target.isContentEditable||[...document.querySelectorAll('.el-message-box__wrapper')].some(node=>node.getClientRects().length))return;const handlers={F1:this.capture,F2:()=>this.selectMode('recognition'),F3:()=>this.selectMode('click'),F4:()=>this.drawer&&this.saveCurrentState(),F5:this.execute,F6:this.previewGroup};if(handlers[event.key]){event.preventDefault();handlers[event.key]();}}
+  }
 };
 </script>
-
 <style>
-body {margin: 0; background: #f4f6f8; color: #263445; font-family: system-ui, sans-serif;}
-main {max-width: 1200px; margin: auto; padding: 24px;}
-h1 {font-size: 24px;} h2 {font-size: 18px;}
-.el-card {margin: 16px 0;} .columns {display: grid; grid-template-columns: 1fr 1fr; gap: 20px;}
-canvas {max-width: 100%; display: block; background: #eee; cursor: crosshair;}
-pre {max-height: 300px; overflow: auto; font-size: 12px; white-space: pre-wrap;}
-small {color: #64748b;} input[type=file] {margin-left: 12px;}
-@media (max-width: 800px) {.columns {grid-template-columns: 1fr;}}
+body{margin:0;background:#f3f5f8;color:#263445;font-family:system-ui,sans-serif}button{font-family:inherit;cursor:pointer}h1{font-size:21px}h2{font-size:19px;margin:8px 0}h3{font-size:15px}.workbench{display:flex;min-height:100vh}.sidebar{width:175px;flex-shrink:0;background:#172638;color:#fff;padding:22px 16px}.sidebar p{font-size:12px;color:#a9bbcf;margin-bottom:32px}.sidebar button{display:block;border:0;color:#ccd8e5;background:transparent;padding:13px 15px;border-radius:6px;width:100%;text-align:left;margin:5px 0}.sidebar button.active{color:white;background:#335779}.main-content{padding:20px 28px;flex:1;min-width:0}.toolbar,.section-heading,.button-row,.group-bar,.run-summary,.result-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.toolbar{padding-bottom:20px}.section-heading{justify-content:space-between;margin-bottom:12px}.el-card{margin:18px 0}.el-alert{margin-bottom:14px}.group-bar{margin:16px 0}.group-bar>button:not(.el-button){border:1px solid #dbe2eb;background:white;padding:9px 14px;border-radius:5px}.group-bar>button.active{border-color:#409eff;color:#1974c9;background:#edf6ff}.search{max-width:480px;margin-bottom:16px}.state-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}.state-card,.reference-card{background:white;border:1px solid #dbe2eb;border-radius:7px;text-align:left;overflow:hidden;display:flex;flex-direction:column;padding:12px;gap:7px}.state-card:hover,.reference-card:hover{border-color:#409eff}.state-card img{height:90px;max-width:100%;object-fit:contain}.text-thumbnail{height:90px;background:#edf2fa;display:flex;align-items:center;justify-content:center;font-size:17px;overflow:auto}.state-card small,.flow-label,.hint,small{color:#64748b;font-size:12px}.flow-label{background:#f0f6ff;border-radius:3px;padding:3px 6px}.import-button{position:relative;overflow:hidden;color:#409eff;border:1px solid #b3d8ff;border-radius:4px;padding:9px 12px;font-size:12px;cursor:pointer}.import-button input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}.disabled{opacity:.5}.button-row{margin:12px 0}.button-row .el-button+.el-button{margin-left:0}.capture-workbench canvas{display:block;max-width:100%;height:auto;touch-action:none;cursor:crosshair;background:#e9edf2}.empty-capture{text-align:center;padding:60px;background:#f4f7fb;color:#718096;border:1px dashed #cbd5e1}.drawer-body{padding:0 22px 25px;max-height:calc(100vh - 75px);overflow:auto}.coordinates{display:flex;gap:4px}.coordinates .el-input-number{width:70px}.drawer-body .el-select{width:100%}.flow-layout{display:grid;grid-template-columns:230px 1fr;gap:18px}.flow-card{padding:16px 12px;margin-top:12px;background:#f6f8fb;border:1px solid transparent;border-radius:5px;cursor:pointer}.flow-card.active{border-color:#409eff;background:#edf6ff}.flow-card small{display:block;margin-top:5px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 15px}.reference-cards{display:flex;gap:10px;flex-wrap:wrap}.reference-card{width:130px}.reference-card img{height:55px;object-fit:contain;max-width:100%}.run-summary{margin:18px 0;font-size:13px}.evidence{display:grid;grid-template-columns:minmax(180px,1fr) 1fr;gap:20px}.evidence>img{max-width:100%;max-height:450px;object-fit:contain}.evidence>div{max-height:450px;overflow:auto}.event{border-bottom:1px solid #eee;padding:8px}.event pre{margin:3px 0;font-size:11px}.preview-results{margin-top:16px}.result-row{margin:9px 0;font-size:12px}pre{max-height:350px;overflow:auto;font-size:12px;white-space:pre-wrap}.el-drawer__wrapper{pointer-events:none}.el-drawer{pointer-events:auto}@media(max-width:1000px){.sidebar{width:135px}.main-content{padding:14px}.form-grid{grid-template-columns:1fr}.flow-layout{grid-template-columns:190px 1fr}}@media(max-width:720px){.workbench{display:block}.sidebar{width:auto;display:flex;gap:10px;align-items:center;padding:10px}.sidebar h1{font-size:15px;white-space:nowrap}.sidebar p{display:none}.sidebar button{width:auto}.flow-layout,.evidence{grid-template-columns:1fr}.el-drawer{max-width:100%}.toolbar .el-select{width:100%}}
 </style>

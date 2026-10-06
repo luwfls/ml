@@ -1,10 +1,14 @@
-# 安卓 State 自动化工作台 · 首版
+# 安卓 State 自动化工作台
 
-SCM-581 的安卓 State 自动化工作台首版，支持通过截图制作图片或文字 State，并使用 ADB 操控安卓设备。
+SCM-581 的安卓 State 自动化工作台，支持通过截图制作图片或文字 State，并使用 ADB 操控安卓设备。当前 v0.4 提供 **State 制作**与**循环流程**两个页面，恢复参考项目 template / loop_template 的核心交互。操作说明见 [工作台使用指南](docs/workbench-usage.md)。
 
 沿用参考项目的 Vue 2 / Element UI / Vite 前端工程形态，以及 Python 本地 API、OpenCV 匹配与按画面循环的思路。只实现新核心，不包含原游戏流程、Windows 窗口控制、桌面截图、dm/COM、32 位环境、旧 workflow 图引擎和调度模块。
 
 ## 已实现
+
+- State 分组、卡片筛选、共享编辑抽屉、图片/文字表单与动作表单；原始像素框选、独立点击区、单项/整组预览及确认后的新截图执行。
+- 多流程新建/复制/删除与配置预览，显式选择 State、分组快速添加；旧单流程迁移为默认流程。
+- 真实协作暂停/继续/停止，暂停不发送新动作、恢复重新截图且保留计数/去重；运行记录刷新/重启后可查看截图与事件。
 
 - ADB 枚举设备，明确 serial；二进制截图；点击、滑动、BACK/HOME/ENTER；命令超时和错误处理。
 - 工作台设备截图/导入 PNG、原像素框选、裁剪图片、State 保存与编辑、图片匹配预览。
@@ -57,6 +61,8 @@ npm run build
 ```
 
 后端仅绑定本机，首版不支持远程部署。依赖沿用参考前端的锁定版本；Vue 2 及其依赖已有维护/安全欠账，当前未做框架升级，也不建议直接发布到公网。
+
+验证命令：`python -m unittest discover -s tests -v`、`node --test tests/frontend-model.test.mjs`、`npm run build`。真实 Chromium 页面回归脚本为 `tests/browser_smoke.py`，需要单独安装 Playwright；`--python` 指向项目虚拟环境，`--artifacts` 指定截图目录，可通过 `--chromium` 指定本机浏览器。它使用 `tests/browser_backend.py` 替身设备，不发送真实 ADB 输入，结束时清理测试后端。
 
 ## 制作并运行第一条图片流程
 

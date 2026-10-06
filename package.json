@@ -1,8 +1,16 @@
 {
   "name": "android-state-workbench",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "scripts": {"dev": "vite --host 127.0.0.1 --port 5173", "build": "vite build"},
-  "dependencies": {"@vitejs/plugin-vue2": "2.3.3", "vite": "5.4.21", "vue": "2.7.16", "element-ui": "2.15.14"}
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue2": "2.3.3",
+    "vite": "5.4.21",
+    "vue": "2.7.16",
+    "element-ui": "2.15.14"
+  }
 }
