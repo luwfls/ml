@@ -1,11 +1,12 @@
 # 安卓 State 自动化工作台
 
-SCM-581 的安卓 State 自动化工作台，支持通过截图制作图片或文字 State，并使用 ADB 操控安卓设备。当前 v0.4 提供 **State 制作**与**循环流程**两个页面，恢复参考项目 template / loop_template 的核心交互。操作说明见 [工作台使用指南](docs/workbench-usage.md)。
+SCM-581 的安卓 State 自动化工作台，支持通过截图制作图片或文字 State，并使用 ADB 操控安卓设备。当前 v0.5 提供 **State 制作**、**循环流程**与**任务**三个页面，保留参考项目 template / loop_template 的核心交互。操作说明见 [工作台使用指南](docs/workbench-usage.md)。
 
 沿用参考项目的 Vue 2 / Element UI / Vite 前端工程形态，以及 Python 本地 API、OpenCV 匹配与按画面循环的思路。只实现新核心，不包含原游戏流程、Windows 窗口控制、桌面截图、dm/COM、32 位环境、旧 workflow 图引擎和调度模块。
 
 ## 已实现
 
+- 任务自动生成 ID、关联已保存流程；手动多选在线空闲 ADB 设备，各设备独立运行和记录，支持分别暂停/继续/停止，部分启动失败不影响其他设备。
 - State 分组、卡片筛选、共享编辑抽屉、图片/文字表单与动作表单；原始像素框选、独立点击区、单项/整组预览及确认后的新截图执行。
 - 多流程新建/复制/删除与配置预览，显式选择 State、分组快速添加；旧单流程迁移为默认流程。
 - 真实协作暂停/继续/停止，暂停不发送新动作、恢复重新截图且保留计数/去重；运行记录刷新/重启后可查看截图与事件。
@@ -64,7 +65,7 @@ npm run build
 
 后端仅绑定本机，首版不支持远程部署。依赖沿用参考前端的锁定版本；Vue 2 及其依赖已有维护/安全欠账，当前未做框架升级，也不建议直接发布到公网。
 
-验证命令：`python -m unittest discover -s tests -v`、`node --test tests/frontend-model.test.mjs`、`npm run build`。真实 Chromium 页面回归脚本为 `tests/browser_smoke.py`，需要单独安装 Playwright；`--python` 指向项目虚拟环境，`--artifacts` 指定截图目录，可通过 `--chromium` 指定本机浏览器。它使用 `tests/browser_backend.py` 替身设备，不发送真实 ADB 输入，结束时清理测试后端。
+验证命令：`python -m unittest discover -s tests -v`、`node --test tests/frontend-*.test.mjs`、`npm run build`。真实 Chromium 页面回归脚本为 `tests/browser_smoke.py`，需要单独安装 Playwright；`--python` 指向项目虚拟环境，`--artifacts` 指定截图目录，可通过 `--chromium` 指定本机浏览器。它使用 `tests/browser_backend.py` 替身设备，不发送真实 ADB 输入，结束时清理测试后端。
 
 ## 制作并运行第一条图片流程
 
@@ -121,11 +122,11 @@ npm run build
 
 Windows 将 `.venv/bin/python` 换成 `.\.venv\Scripts\python.exe`。`requirements-tested.txt` 记录本次 Python 3.14.7 x64 环境中的依赖版本；未宣称其他 Python/OCR 组合已验证。
 
-测试使用固定图像和替身设备，覆盖截图字节、图片坐标/歧义、文字匹配与缓存、循环计数/条件/停止/兜底、保存、API、独立结果证据、写盘失败、构建文件服务；新增真实 CPU OCR 离线识别、四边形坐标转换、本地配置、字典校验、并发保护、文字预览和执行。`tests/fixtures/ocr-ui.png` 是用 Noto Sans CJK 绘制的合成测试图，不是真实业务截图。本次未连接真机/POS，也未完成真实业务端到端验收或浏览器自动化测试。
+测试使用固定图像和替身设备，覆盖截图字节、图片坐标/歧义、文字匹配与缓存、循环计数/条件/停止/兜底、保存、API、独立结果证据、写盘失败、构建文件服务；新增真实 CPU OCR 离线识别、四边形坐标转换、本地配置、字典校验、并发保护、文字预览和执行。`tests/fixtures/ocr-ui.png` 是用 Noto Sans CJK 绘制的合成测试图，不是真实业务截图。本次未连接真机/POS，也未完成真实业务端到端验收；浏览器自动化已使用替身设备通过。
 
 ## 首版边界与下一步
 
-尚未实现有序业务步骤和 TestCase 独立断言模型、子流程及有预算的恢复、分组/删除界面、旧资产迁移工具、中文输入、多设备验收及 CI 报告。当前是有限的图片/文字循环闭环，不代表此前设计草案所有阶段已经完成。
+尚未实现有序业务步骤和 TestCase 独立断言模型、子流程及有预算的恢复、旧资产迁移工具、中文输入、多设备验收及 CI 报告。当前是有限的图片/文字循环闭环，不代表此前设计草案所有阶段已经完成。
 
 输入可受设备页面刷新影响；仅适用于可控测试设备及已确认页面。同 State 动作抑制是连续命中保护，不提供业务幂等保证。超时/取消在动作边界生效，最坏要等待当前 ADB 调用超时（默认 10 秒）。每轮证据都保存到磁盘，长时间使用需自行归档或清理运行目录；首版尚未实现自动保留策略。
 

@@ -39,7 +39,11 @@ def main():
                 log.write(str(action) + '\n')
 
     web.AdbDevice = FakeDevice
-    web.list_devices = lambda adb: [{'serial': 'browser-device', 'status': 'device'}]
+    web.list_devices = lambda adb: [
+        {'serial': 'browser-device', 'status': 'device'},
+        {'serial': 'browser-device-2', 'status': 'device'},
+        {'serial': 'browser-offline', 'status': 'offline'},
+    ]
     server = web.create_server(Store(args.data), args.port)
     print(f'Browser fixture ready on {server.server_port}', flush=True)
     try:
