@@ -1,0 +1,52 @@
+## State 制作与循环流程
+
+### 启动
+
+一键启动前后端：Mac 双击根目录 `start-macos.command`，或在项目目录执行 `bash ./start.sh`；Windows 双击 `start-windows.cmd`。启动成功后访问 http://127.0.0.1:8765，无需另开前端终端。Ctrl+C 停止服务。
+
+首次启动会创建 `.venv`、安装锁定依赖并构建前端；需要标准 Python 3.14 64 位、ADB，以及 Node.js LTS（部署包已有匹配的前端构建时无需 Node）。首次安装需要联网，后续复用已有环境和构建。将 Android platform-tools 解压到项目的 `platform-tools` 目录，或将 adb 加入 PATH；也可指定 `bash ./start.sh --adb "/路径/platform-tools/adb"`。
+
+命令入口支持 `--no-ocr`（仅图片模式）、`--port 8766`、`--ocr-config ocr.local.json`、`--setup-only`（只准备环境）、`--refresh`（重装依赖/重建）。`--no-ocr` 只关闭运行时 OCR，仍安装完整锁定依赖，平台支持要求同下文。Mac 若提示脚本没有执行权限，执行 `chmod +x start-macos.command start.sh`；若系统阻止打开，请在 Finder 中右键打开并按系统提示确认。程序不会自动安装系统 Python/Node/ADB。
+
+Windows 使用根目录 `start-windows.cmd`，部署步骤见 windows-deployment.md。源码前端构建为 `npm ci`、`npm run build`，构建后由后端同时提供页面和 API：http://127.0.0.1:8765。
+
+Mac/Linux 前后端开发分别启动：
+
+```bash
+# 在项目目录中，使用标准 Python 3.14 64 位
+python3.14 -m venv .venv
+.venv/bin/python -m pip install -r requirements-tested.txt
+.venv/bin/python -m automation --data data --port 8765
+```
+
+另一终端在同一目录执行 `npm ci`、`npm run dev`，打开 http://127.0.0.1:5173。前端代理后端 8765；保持两个终端打开，停止时分别 Ctrl+C。
+
+仅验证管理页面可在新虚拟环境只安装 `numpy==2.5.3` 和 `opencv-python==5.0.0.93`，再用 `--no-ocr` 启动后端。无需 ADB 即可导入 PNG 制作图片 State；文字预览必须启用 OCR，设备截图和执行动作必须安装 ADB 并选择授权设备。Python 3.14 的 ONNX Runtime 1.30.0 macOS wheel 仅提供 arm64（macOS 14+）；Intel Mac 先使用无 OCR 模式。当前 OpenCV wheel 要求 Apple Silicon macOS 13+、Intel macOS 14+。
+
+### 制作 State
+
+先建立业务分组，例如“采购收货”。选择安卓设备截图，或导入本地 PNG；框选稳定的识别图案，在编辑抽屉填写英文 ID、中文名称、分组和角色后保存。
+
+图片 State 显示裁剪缩略图，文字 State 显示候选文案。图片与文字二选一；文字支持多文案 OR、精确/包含/模糊匹配、置信度和搜索区域。模糊匹配不要使用过短文案。预览展示匹配框、得分及歧义，仅预览不发送设备输入。
+
+动作使用表单配置：无动作、点击、返回/主页/确认、滑动及动作后等待。成功和失败 State 仅作为断言，没有输入动作。普通 State 每次识别最多一个输入动作，其后的操作由新截图触发；等待-only 配置仍可保存。图片 State 可设置独立点击区，其位置相对于识别图案保存；匹配时映射回当前截图坐标，并拒绝越界或歧义目标。
+
+条件中的“同时命中”与“同时不能命中”引用其他 State，在同一帧判断。编辑已有配置时保留现有高级参数；本版本不改动识别算法。
+
+单 State 执行使用已保存的配置和设备新截图，点击执行前确认。不要将导入的旧截图当作当前设备画面执行。分组预览无动作，可用于检查同帧条件。
+
+### 配置循环流程
+
+新建一个有名称和英文 ID 的流程，选择所需分组/State。分组用于快速选择，保存时记录明确的 State ID 集合，后来新增 State 不会自动加入已保存流程。
+
+至少包含一个成功 State。配置完成次数、最大轮数、超时和轮间等待，先开启“只识别”验证命中；确认识别正确后才开启实际执行。参考 State 卡片可以打开共用编辑抽屉，配置 JSON 可查看当前参数。
+
+选择设备，保存并启动。运行面板提供状态、成功次数、事件和截图证据；记录存于 `data/runs`。同一个设备不能同时执行两个流程；运行或暂停期间先停止再修改 State/资源。
+
+暂停是协作暂停，会等待当前有界的截图/识别/动作结束；界面可能先显示“暂停中”。暂停后不发送新动作，恢复保留当前计数与重复动作保护。停止会取消暂停中的任务并保存结果。识别歧义导致的终止状态不能用继续按钮恢复，需要检查配置后重新启动。服务重启后仍能查看记录，未完成的旧运行标记为中断，不自动重放动作。
+
+### 数据与兼容性
+
+多个流程和分组保存在项目 `data` 目录。升级前建议备份整个 `data`；既有 State 和旧 `flow.json` 保留，旧单流程作为默认流程迁移。复制图片 State 同时复制其图片资源，删除被流程或其他 State 条件引用的 State 会被拒绝；删除分组需先处理其成员，避免无意删除测试资源。
+
+本版本不包含旧项目调度器、Windows 窗口工具、游戏模块或旧 YAML 图流程引擎。Windows/Mac 实机及真实安卓业务端到端仍需现场验收；本地浏览器与替身设备验证记录见 VERIFICATION.md。
