@@ -118,7 +118,8 @@ class Store:
         self.captures = self.root / 'captures'
         self.runs = self.root / 'runs'
         self.flows = self.root / 'flows'
-        for path in [self.states, self.assets, self.captures, self.runs, self.flows]:
+        self.tasks = self.root / 'tasks'
+        for path in [self.states, self.assets, self.captures, self.runs, self.flows, self.tasks]:
             path.mkdir(parents=True, exist_ok=True)
 
     def save(self, data):
@@ -280,5 +281,33 @@ class Store:
         return self.save_flow({**flow, 'id': new_id, 'name': name or flow['name']})
 
     def delete_flow(self, flow_id):
-        (self.flows / (identifier(flow_id) + '.json')).unlink()
+        flow_id = identifier(flow_id)
+        if any(task['flow_id'] == flow_id for task in self.list_tasks()):
+            raise ValueError('流程被任务引用，不能删除')
+        (self.flows / (flow_id + '.json')).unlink()
+        return {'ok': True}
+
+    def list_tasks(self):
+        return [json.loads(path.read_text(encoding='utf-8')) for path in sorted(self.tasks.glob('*.json'))]
+
+    def save_task(self, task):
+        task_id = task.get('id')
+        if task_id is None or task_id == '':
+            task_id = uuid4().hex
+        identifier(task_id)
+        name = task.get('name')
+        if not isinstance(name, str) or not name.strip() or len(name) > 200:
+            raise ValueError('任务名称不能为空且最多 200 字')
+        flow_id = identifier(task.get('flow_id'))
+        if not any(flow['id'] == flow_id for flow in self.list_flows()):
+            raise ValueError('流程不存在')
+        saved = {'id': task_id, 'name': name.strip(), 'flow_id': flow_id}
+        self.write_json(self.tasks / (task_id + '.json'), saved)
+        return saved
+
+    def delete_task(self, task_id):
+        path = self.tasks / (identifier(task_id) + '.json')
+        if not path.exists():
+            raise ValueError('任务不存在')
+        path.unlink()
         return {'ok': True}

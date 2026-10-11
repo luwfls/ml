@@ -1,9 +1,9 @@
 <template>
   <main class="workbench">
-    <aside class="sidebar"><h1>State 自动化</h1><p>安卓设备工作台</p><button :class="{active:page==='states'}" @click="page='states'">State 制作</button><button :class="{active:page==='flows'}" @click="page='flows'">循环流程</button></aside>
+    <aside class="sidebar"><h1>State 自动化</h1><p>安卓设备工作台</p><button :class="{active:page==='states'}" @click="page='states'">State 制作</button><button :class="{active:page==='flows'}" @click="page='flows'">循环流程</button><button :class="{active:page==='tasks'}" @click="page='tasks'">任务</button></aside>
     <div class="main-content"><header class="toolbar"><el-select v-model="serial" placeholder="选择 ADB 设备"><el-option v-for="d in devices" :key="d.serial" :label="d.serial+' · '+d.status" :value="d.serial" :disabled="d.status!=='device'" /></el-select><el-button size="small" @click="refreshDevices">刷新设备</el-button><el-tag :type="apiReady?'success':'danger'">API {{ apiReady?'在线':'未连接' }}</el-tag><el-tag :type="ocrReady?'success':'info'">OCR {{ ocrReady?'RapidOCR 已启用':'未启用（可制作图片）' }}</el-tag></header>
       <el-alert v-if="error" :title="error" type="error" show-icon @close="error=''" />
-      <el-alert v-if="locked" title="存在活动运行，State、分组、流程配置暂时锁定；请停止后编辑。" type="warning" :closable="false" />
+      <el-alert v-if="locked" title="存在活动运行，State、分组、流程和任务配置暂时锁定；请停止后编辑。" type="warning" :closable="false" />
       <section v-show="page==='states'">
         <div class="section-heading"><h2>State 制作</h2><el-button type="primary" :disabled="locked" @click="openState()">新建 State</el-button></div>
         <div class="group-bar"><button :class="{active:groupFilter==='*'}" @click="groupFilter='*'">全部 {{ states.length }}</button><button :class="{active:groupFilter===''}" @click="groupFilter=''">未分组 {{ groupCount('') }}</button><button v-for="g in groups" :key="g.name" :class="{active:groupFilter===g.name}" @click="groupFilter=g.name">{{ g.name }} {{ groupCount(g.name) }}</button><el-button size="small" :disabled="locked" @click="groupAction('create')">新建分组</el-button><template v-if="groupFilter&&groupFilter!=='*'"><el-button size="small" :disabled="locked" @click="groupAction('rename')">重命名</el-button><el-button size="small" :disabled="locked" @click="groupAction('copy')">复制分组</el-button><el-button size="small" :disabled="locked" @click="groupAction('delete')">删除空分组</el-button></template></div>
@@ -16,6 +16,14 @@
         </el-card>
       </section>
       <flow-panel v-if="page==='flows'" :flows="flows" :flow="flow" :states="states" :groups="groups" :locked="locked" :serial="serial" @new="newFlow" @select="selectFlow" @edit="openState" @save="saveCurrentFlow" @start="startFlow" @copy="copyFlow" @delete="deleteFlow" />
+      <task-panel v-if="page==='tasks'" :tasks="tasks" :task="task" :flows="flows" :runs="runs" :locked="locked||taskStarting" :busy="busy||taskStarting" @new="newTask" @select="selectTask" @save="saveCurrentTask" @delete="deleteTask" @start="openTaskStart" @refresh="refreshTaskCatalog" @run="selectRun" />
+      <el-dialog title="启动任务" :visible.sync="taskDialog" :close-on-click-modal="!taskStarting" :close-on-press-escape="!taskStarting" :show-close="!taskStarting" width="580px">
+        <p v-if="startTaskSnapshot">{{ startTaskSnapshot.name }} · {{ startTaskSnapshot.id }}</p><p class="hint">选择在线且空闲的设备。各设备独立执行，不会自动打开安卓应用。</p>
+        <el-form label-width="100px"><el-form-item label="ADB 设备"><el-select v-model="taskSerials" multiple placeholder="选择设备" :disabled="taskStarting||taskDevicesLoading" style="width:100%"><el-option v-for="d in devices" :key="d.serial" :label="d.serial+' · '+d.status+(taskDeviceOccupied(d.serial)?' · 运行中':'')" :value="d.serial" :disabled="taskDeviceDisabled(d)" /></el-select></el-form-item></el-form>
+        <el-button size="small" :loading="taskDevicesLoading" :disabled="taskStarting" @click="refreshTaskDevices">刷新设备</el-button>
+        <div v-for="r in taskResults" :key="r.serial" class="result-row"><strong>{{ r.serial }}</strong><span v-if="r.error" style="color:#f56c6c">{{ r.error }}</span><template v-else><el-tag type="success">已启动</el-tag><el-button size="mini" @click="openTaskRun(r.id)">查看运行</el-button></template></div>
+        <span slot="footer"><el-button :disabled="taskStarting" @click="taskDialog=false">关闭</el-button><el-button type="primary" :loading="taskStarting" :disabled="busy||taskDevicesLoading||!validTaskSerials.length" @click="startTask">启动</el-button></span>
+      </el-dialog>
       <run-panel :runs="runs" :run="runData" :run-id="runId" @refresh="refreshRuns" @select="selectRun" @control="controlRun" />
     </div>
     <state-editor :visible="drawer" :editor="editor" :states="states" :groups="groups" :locked="locked" :serial="serial" :can-crop="canCrop" :can-r-o-i="canROI" :can-target="canCrop&&selection.click.length===4" :can-preview="!!captureId&&(editor.kind==='image'||ocrReady)" @close="drawer=false" @save="saveCurrentState" @crop="crop" @roi="applyROI" @target="applyTarget" @preview="preview" @execute="execute" @copy="copyState" @delete="deleteState" />
@@ -26,20 +34,32 @@ import CaptureCanvas from './components/CaptureCanvas.vue';
 import StateEditor from './components/StateEditor.vue';
 import FlowPanel from './components/FlowPanel.vue';
 import RunPanel from './components/RunPanel.vue';
+import TaskPanel from './components/TaskPanel.vue';
 import {api,clone,editState,saveState,normalizedRegion,relativeTarget,liveStatuses,conditionLabel} from './model.js';
 const freshFlow=()=>({id:'',name:'',state_ids:[],max_rounds:200,timeout_seconds:300,poll_ms:1000,completion_count:1,dry_run:true});
 export default {
-  components:{CaptureCanvas,StateEditor,FlowPanel,RunPanel},
-  data:()=>({page:'states',devices:[],serial:'',apiReady:false,ocrReady:false,error:'',states:[],groups:[],flows:[],runs:[],groupFilter:'*',stateSearch:'',drawer:false,editor:editState(),captureId:'',captureUrl:'',selection:{recognition:[],click:[],roi:[],size:[]},probe:null,matches:[],flow:freshFlow(),runId:'',runData:null,timer:null,polling:false,busy:false}),
-  computed:{locked(){return this.busy||this.runs.some(r=>r.live===true||(r.live===undefined&&liveStatuses.includes(r.status)))||this.runData?.live===true;},canCrop(){const b=this.selection.recognition;return !!this.captureId&&b.length===4&&b[2]>b[0]&&b[3]>b[1];},canROI(){return this.selection.roi.length===4;},filteredStates(){return this.states.filter(s=>(this.groupFilter==='*'||(s.group||'')===this.groupFilter)&&(s.name+' '+s.id+' '+(s.recognition.texts||[]).join(' ')).toLowerCase().includes(this.stateSearch.toLowerCase()));}},
+  components:{CaptureCanvas,StateEditor,FlowPanel,RunPanel,TaskPanel},
+  data:()=>({page:'states',devices:[],serial:'',apiReady:false,ocrReady:false,error:'',states:[],groups:[],flows:[],tasks:[],task:{id:'',name:'',flow_id:''},taskDialog:false,startTaskSnapshot:null,taskSerials:[],taskResults:[],taskStarting:false,taskDevicesLoading:false,runs:[],groupFilter:'*',stateSearch:'',drawer:false,editor:editState(),captureId:'',captureUrl:'',selection:{recognition:[],click:[],roi:[],size:[]},probe:null,matches:[],flow:freshFlow(),runId:'',runData:null,timer:null,polling:false,busy:false}),
+  computed:{validTaskSerials(){return [...new Set(this.taskSerials)].filter(serial=>this.devices.some(d=>d.serial===serial&&!this.taskDeviceDisabled(d)));},locked(){return this.busy||this.taskStarting||this.runs.some(r=>r.live===true||(r.live===undefined&&liveStatuses.includes(r.status)))||this.runData?.live===true;},canCrop(){const b=this.selection.recognition;return !!this.captureId&&b.length===4&&b[2]>b[0]&&b[3]>b[1];},canROI(){return this.selection.roi.length===4;},filteredStates(){return this.states.filter(s=>(this.groupFilter==='*'||(s.group||'')===this.groupFilter)&&(s.name+' '+s.id+' '+(s.recognition.texts||[]).join(' ')).toLowerCase().includes(this.stateSearch.toLowerCase()));}},
   mounted(){window.addEventListener('keydown',this.hotkey);this.guard(async()=>{const health=await api('/api/health');this.apiReady=true;this.ocrReady=health.ocr==='ready';await this.reloadCatalog();await this.refreshDevices();await this.refreshRuns();if(this.flows.length)this.flow=clone(this.flows[0]);});this.timer=setInterval(this.poll,1000);},
   beforeDestroy(){window.removeEventListener('keydown',this.hotkey);clearInterval(this.timer);},
   methods:{
     conditionLabel,
     async guard(fn){this.error='';try{return await fn();}catch(e){if(e!=='cancel'&&e!=='close')this.error=e.message||String(e);return null;}},
-    async reloadCatalog(){[this.states,this.groups,this.flows]=await Promise.all([api('/api/states'),api('/api/groups'),api('/api/flows')]);},
+    async reloadCatalog(){[this.states,this.groups,this.flows,this.tasks]=await Promise.all([api('/api/states'),api('/api/groups'),api('/api/flows'),api('/api/tasks')]);},
     refreshDevices(){return this.guard(async()=>{this.devices=await api('/api/devices');});},
     refreshRuns(){return this.guard(async()=>{this.runs=await api('/api/runs');});},
+    refreshTaskCatalog(){return this.guard(()=>this.reloadCatalog());},
+    openTaskRun(id){this.taskDialog=false;return this.selectRun(id);},
+    newTask(){if(!this.locked&&!this.taskStarting)this.task={id:'',name:'',flow_id:''};},
+    selectTask(task){this.task=clone(task);},
+    saveCurrentTask(){return this.guard(async()=>{if(this.locked||this.taskStarting)return;const origin=this.task,draft=clone(origin);this.busy=true;try{const saved=await api('/api/tasks',draft);await this.reloadCatalog();if(this.task===origin)this.task=clone(saved);this.$message.success('任务已保存');}finally{this.busy=false;}});},
+    deleteTask(){return this.guard(async()=>{if(this.locked||this.taskStarting)return;const origin=this.task,draft=clone(origin);this.busy=true;try{await this.$confirm('删除任务 '+draft.name+'？已有运行记录会保留。','删除任务',{type:'warning'});await api('/api/tasks/delete',{id:draft.id});await this.reloadCatalog();if(this.task===origin)this.task={id:'',name:'',flow_id:''};this.$message.success('任务已删除');}finally{this.busy=false;}});},
+    taskDeviceOccupied(serial){return this.runs.some(r=>r.serial===serial&&(r.live===true||(r.live===undefined&&liveStatuses.includes(r.status))))||(this.runData?.serial===serial&&this.runData.live===true);},
+    taskDeviceDisabled(device){return device.status!=='device'||this.taskDeviceOccupied(device.serial);},
+    refreshTaskDevices(){return this.guard(async()=>{if(this.taskDevicesLoading)return;this.taskDevicesLoading=true;try{const [devices,runs]=await Promise.all([api('/api/devices'),api('/api/runs')]);this.devices=devices;this.runs=runs;this.taskSerials=this.validTaskSerials;return true;}finally{this.taskDevicesLoading=false;}});},
+    openTaskStart(){return this.guard(async()=>{if(this.busy||this.taskStarting)return;const saved=this.tasks.find(t=>t.id===this.task.id);if(!saved)throw new Error('请先保存任务');this.startTaskSnapshot=clone(saved);this.taskSerials=[];this.taskResults=[];this.taskDialog=true;await this.refreshTaskDevices();});},
+    startTask(){return this.guard(async()=>{if(this.busy||this.taskStarting||this.taskDevicesLoading)return;const saved=clone(this.startTaskSnapshot),serials=[...new Set(this.taskSerials)];if(!saved||!serials.length)return;if(serials.length!==this.validTaskSerials.length)throw new Error('所选设备已离线或被占用，请刷新设备');this.taskStarting=true;try{await this.$confirm('任务 '+saved.name+'：执行任务当前已保存流程（以启动时配置为准），可能向 '+serials.join('、')+' 发送已配置输入动作。确认启动？','确认设备输入',{type:'warning'});const result=await api('/api/tasks/start',{id:saved.id,serials});this.taskResults=result.results||[];await this.refreshRuns();this.taskSerials=this.validTaskSerials;}finally{this.taskStarting=false;}});},
     groupCount(name){return this.states.filter(s=>(s.group||'')===name).length;},flowLabels(id){return this.flows.filter(f=>(f.state_ids||[]).includes(id)).map(f=>f.name||f.id).join(' / ');},
     openState(state){this.editor=editState(state||{group:this.groupFilter==='*'?'':this.groupFilter});this.drawer=true;},
     selectMode(mode){this.page='states';this.$nextTick(()=>this.$refs.capture.setMode(mode));},
@@ -65,7 +85,7 @@ export default {
     copyFlow(){return this.guard(async()=>{const {value}=await this.$prompt('新流程 ID','复制流程');const saved=await api('/api/flows/copy',{id:this.flow.id,new_id:value,name:this.flow.name+' 副本'});await this.reloadCatalog();this.flow=clone(saved);});},
     deleteFlow(){return this.guard(async()=>{await this.$confirm('删除流程 '+this.flow.name+'？','删除流程',{type:'warning'});await api('/api/flows/delete',{id:this.flow.id});await this.reloadCatalog();this.flow=this.flows.length?clone(this.flows[0]):freshFlow();});},
     selectRun(id){this.runId=id;this.runData=null;return this.guard(()=>this.pollDetail());},async pollDetail(){const id=this.runId;if(!id)return;const data=await api('/api/runs/'+encodeURIComponent(id));if(this.runId===id)this.runData=data;},
-    async poll(){if(this.polling)return;this.polling=true;try{if(this.runId)await this.pollDetail();if(this.runs.some(r=>r.live)||this.runData?.live) this.runs=await api('/api/runs');}catch(e){this.error=e.message;}finally{this.polling=false;}},
+    async poll(){if(this.polling)return;this.polling=true;try{if(this.runId)await this.pollDetail();if(this.page==='tasks'||this.taskDialog||this.runs.some(r=>r.live)||this.runData?.live){this.runs=await api('/api/runs');if(this.taskDialog)this.taskSerials=this.validTaskSerials;}}catch(e){this.error=e.message;}finally{this.polling=false;}},
     controlRun(action){return this.guard(async()=>{if(!this.runId||this.runData?.id!==this.runId)return;const id=this.runId;await api('/api/'+action,{id});await this.pollDetail();await this.refreshRuns();});},
     hotkey(event){if(event.defaultPrevented||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey||['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName)||event.target.isContentEditable||[...document.querySelectorAll('.el-message-box__wrapper')].some(node=>node.getClientRects().length))return;const handlers={F1:this.capture,F2:()=>this.selectMode('recognition'),F3:()=>this.selectMode('click'),F4:()=>this.drawer&&this.saveCurrentState(),F5:this.execute,F6:this.previewGroup};if(handlers[event.key]){event.preventDefault();handlers[event.key]();}}
   }

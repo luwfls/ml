@@ -145,7 +145,7 @@ def main():
                         assert copied['actions'][0]['type'] == 'click_match'
                         assert len(copied['actions'][0]['target_box']) == 4
                         page.locator('.toolbar .el-select').click()
-                        page.locator('.el-select-dropdown__item:visible').filter(has_text='browser-device').click()
+                        page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('^browser-device ·')).click()
                         drawer.get_by_role('button', name='执行动作 F5', exact=True).click()
                         page.locator('.el-message-box:visible').get_by_role('button', name='确定', exact=True).click()
                         for _ in range(100):
@@ -205,8 +205,51 @@ def main():
                         panel.locator('.el-select').click()
                         page.locator('.el-select-dropdown__item:visible').filter(has_text=run_id).click()
                         expect(panel.locator('.run-summary')).to_contain_text('cancelled')
+                        page.get_by_role('button', name='任务', exact=True).click()
+                        tasks = page.locator('.task-panel')
+                        tasks.get_by_role('button', name='新建任务', exact=True).click()
+                        field(tasks, '任务名称').locator('input').fill('多设备收货验证')
+                        field(tasks, '关联流程').locator('.el-select').click()
+                        page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('^收货循环 · receive-loop$')).click()
+                        tasks.get_by_role('button', name='保存任务', exact=True).click()
+                        expect(tasks.locator('.task-card')).to_have_count(1)
+                        task = api('/api/tasks')[0]
+                        assert task['id'] and task['flow_id'] == 'receive-loop'
+                        tasks.get_by_role('button', name='手动启动', exact=True).click()
+                        dialog = page.locator('.el-dialog:visible')
+                        field(dialog, 'ADB 设备').locator('.el-select').click()
+                        expect(page.locator('.el-select-dropdown__item:visible').filter(has_text='browser-offline')).to_have_class(re.compile('is-disabled'))
+                        page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('^browser-device ·')).click()
+                        page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('^browser-device-2 ·')).click()
+                        dialog.locator('.el-dialog__header').click()
+                        dialog.get_by_role('button', name='启动', exact=True).click()
+                        page.locator('.el-message-box:visible').get_by_role('button', name='确定', exact=True).click()
+                        for _ in range(100):
+                            task_runs = [r for r in api('/api/runs') if r.get('task_id') == task['id']]
+                            if len(task_runs) == 2: break
+                            page.wait_for_timeout(50)
+                        assert len(task_runs) == 2, task_runs
+                        assert {r['serial'] for r in task_runs} == {'browser-device', 'browser-device-2'}
+                        assert len({r['batch_id'] for r in task_runs}) == 1
+                        assert all(r['live'] for r in task_runs)
+                        expect(page.locator('.el-message-box:visible')).to_have_count(0)
+                        page.screenshot(path=str(args.artifacts / 'tasks-workbench.png'), full_page=True)
+                        # Pause/cancel is independent per run; the other device keeps running.
+                        first, second = task_runs
+                        response = page.request.post(base + '/api/pause', data={'id': first['id']})
+                        assert response.ok
+                        wait_status(first['id'], 'paused')
+                        assert api('/api/runs/' + second['id'])['status'] == 'running'
+                        for run in task_runs:
+                            assert page.request.post(base + '/api/cancel', data={'id': run['id']}).ok
+                            wait_status(run['id'], 'cancelled')
+                        page.reload()
+                        expect(page.get_by_text('API 在线', exact=True)).to_be_visible()
+                        page.get_by_role('button', name='任务', exact=True).click()
+                        expect(page.locator('.task-card')).to_have_count(1)
+                        assert len([r for r in api('/api/runs') if r.get('task_id') == task['id']]) == 2
                         assert not errors, errors
-                        print('Chromium smoke passed: import/crop/save/preview/F6/crop-cancel/State-copy/relative-click/execute/delete/group/flow-copy/run/pause/resume/cancel/reload/evidence; no page errors')
+                        print('Chromium smoke passed: State/flow editing, task save and two-device launch, independent pause/cancel, reload and evidence; no page errors')
                     finally:
                         browser.close()
             finally:

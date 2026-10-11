@@ -1,5 +1,6 @@
 from collections import deque
 import base64
+import copy
 import json
 import mimetypes
 import struct
@@ -38,13 +39,13 @@ def create_server(store, port=8765, adb='adb', ocr=None):
     def capture_path(value):
         return store.captures / (identifier(value) + '.png')
 
-    def start_run(body):
+    def start_run(body, states_snapshot=None, metadata=None):
         serial = body.get('serial', '')
         device = AdbDevice(serial, executable=adb)
         serial = device.serial
         with guard:
-            states = store.load_all()
-            flow = body.get('flow')
+            states = copy.deepcopy(states_snapshot) if states_snapshot is not None else store.load_all()
+            flow = copy.deepcopy(body.get('flow'))
             if flow is None:
                 flow = next((f for f in store.list_flows() if f['id'] == body.get('flow_id')), None)
             if not isinstance(flow, dict): raise ValueError('请选择有效流程')
@@ -63,16 +64,17 @@ def create_server(store, port=8765, adb='adb', ocr=None):
             lock = lock_for(serial)
             if not lock.acquire(blocking=False):
                 raise ValueError('该设备正在截图或执行流程')
+            metadata = metadata or {}
             run_id = uuid4().hex
             cancel = threading.Event()
             directory = store.runs / run_id
             try:
                 directory.mkdir()
-                (directory / 'config.json').write_text(json.dumps({'serial': serial, 'states': states, 'flow': flow}, ensure_ascii=False, indent=2), encoding='utf-8')
+                (directory / 'config.json').write_text(json.dumps({'serial': serial, 'states': states, 'flow': flow, **metadata}, ensure_ascii=False, indent=2), encoding='utf-8')
             except Exception:
                 lock.release()
                 raise
-            run = {'id': run_id, 'status': 'running', 'live': True, 'events': [], 'cancel': cancel, 'serial': serial, 'flow_id': flow.get('id'), 'flow_name': flow.get('name', ''), 'success_count': 0}
+            run = {'id': run_id, 'status': 'running', 'live': True, 'events': [], 'cancel': cancel, 'serial': serial, 'flow_id': flow.get('id'), 'flow_name': flow.get('name', ''), 'success_count': 0, **metadata}
             run['control'] = RunControl(cancel, lambda status: run.update(status=status, reason='user_paused' if status == 'paused' else ''))
             runs[run_id] = run
 
@@ -88,7 +90,7 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                             if event['type'] == 'success': run['success_count'] = event['count']
                             if event['type'] == 'frame': run['frame_url'] = f"/runs/{run_id}/frame-{event['index']:04d}.png"
                             if event['type'] in {'success', 'frame'}:
-                                store.write_json(directory / 'summary.json', {key: run[key] for key in ['serial', 'flow_id', 'flow_name', 'success_count', 'frame_url'] if key in run})
+                                store.write_json(directory / 'summary.json', {key: run[key] for key in ['serial', 'flow_id', 'flow_name', 'success_count', 'frame_url', 'task_id', 'task_name', 'batch_id'] if key in run})
 
                     class RecordingDevice:
                         count = 0
@@ -126,6 +128,35 @@ def create_server(store, port=8765, adb='adb', ocr=None):
             raise
         return {'id': run_id}
 
+    def start_task(body):
+        serials = body.get('serials')
+        if not isinstance(serials, list) or not serials or any(not isinstance(s, str) or not s.strip() for s in serials):
+            raise ValueError('请选择非空的设备 serial 列表')
+        serials = [serial.strip() for serial in serials]
+        if len(set(serials)) != len(serials):
+            raise ValueError('设备 serial 不能重复')
+        with guard:
+            task = next((t for t in store.list_tasks() if t['id'] == identifier(body.get('id'))), None)
+            if task is None:
+                raise ValueError('任务不存在')
+            flow = next((f for f in store.list_flows() if f['id'] == task['flow_id']), None)
+            if flow is None:
+                raise ValueError('任务关联的流程不存在')
+            states = store.load_all()
+        online = {device['serial'] for device in list_devices(adb) if device['status'] == 'device'}
+        batch_id = uuid4().hex
+        metadata = {'task_id': task['id'], 'task_name': task['name'], 'batch_id': batch_id}
+        results = []
+        for serial in serials:
+            try:
+                if serial not in online:
+                    raise ValueError('设备不在线或未授权')
+                result = start_run({'serial': serial, 'flow': flow}, states_snapshot=states, metadata=metadata)
+                results.append({'serial': serial, **result})
+            except Exception as error:
+                results.append({'serial': serial, 'error': str(error)})
+        return {'batch_id': batch_id, 'task_id': task['id'], 'results': results}
+
     def run_detail(run_id, include_events=True):
         if run_id in runs:
             return {k: v for k, v in runs[run_id].items() if k not in {'cancel', 'thread', 'control'} and (include_events or k != 'events')}
@@ -142,7 +173,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                     except json.JSONDecodeError: pass
         summary_file = directory / 'summary.json'
         summary = json.loads(summary_file.read_text(encoding='utf-8')) if summary_file.exists() else {}
-        detail = {'id': run_id, 'live': False, 'serial': config['serial'], 'flow_id': config['flow'].get('id'), 'flow_name': config['flow'].get('name', ''), 'success_count': 0, **summary, **result}
+        metadata = {key: config[key] for key in ['task_id', 'task_name', 'batch_id'] if key in config}
+        detail = {'id': run_id, 'live': False, 'serial': config['serial'], 'flow_id': config['flow'].get('id'), 'flow_name': config['flow'].get('name', ''), 'success_count': 0, **metadata, **summary, **result}
         if include_events: detail['events'] = list(events)
         if 'frame_url' not in detail:
             frames = sorted(directory.glob('frame-*.png'))
@@ -195,6 +227,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                     with guard: return self.reply(store.list_groups())
                 if path == '/api/flows':
                     with guard: return self.reply(store.list_flows())
+                if path == '/api/tasks':
+                    with guard: return self.reply(store.list_tasks())
                 if path == '/api/runs':
                     with guard:
                         ids = {p.name for p in store.runs.iterdir() if p.is_dir() and (p / 'config.json').exists()} | set(runs)
@@ -267,12 +301,14 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                         return self.reply({'id': capture_id, 'url': f'/captures/{capture_id}.png', 'width': image.shape[1], 'height': image.shape[0]})
                     finally:
                         lock.release()
-                if path in {'/api/groups', '/api/states/copy', '/api/states/delete', '/api/flows', '/api/flows/copy', '/api/flows/delete'}:
+                if path in {'/api/groups', '/api/states/copy', '/api/states/delete', '/api/flows', '/api/flows/copy', '/api/flows/delete', '/api/tasks', '/api/tasks/delete'}:
                     with guard:
                         mutation_allowed()
                         if path == '/api/groups': result = store.update_group(body.get('action'), body.get('name'), body.get('new_name'))
                         elif path == '/api/states/copy': result = store.copy_state(body['id'], body['new_id'], body.get('name'), body.get('group'))
                         elif path == '/api/states/delete': result = store.delete_state(body['id'])
+                        elif path == '/api/tasks': result = store.save_task(body)
+                        elif path == '/api/tasks/delete': result = store.delete_task(body['id'])
                         elif path == '/api/flows': result = store.save_flow(body)
                         elif path == '/api/flows/copy': result = store.copy_flow(body['id'], body['new_id'], body.get('name'))
                         else: result = store.delete_flow(body['id'])
@@ -341,6 +377,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                         temporary.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding='utf-8')
                         temporary.replace(store.root / 'flow.json')
                         return self.reply(body)
+                if path == '/api/tasks/start':
+                    return self.reply(start_task(body))
                 if path == '/api/run':
                     return self.reply(start_run(body))
                 if path == '/api/cancel':
