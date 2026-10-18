@@ -14,8 +14,9 @@ import cv2
 import numpy as np
 
 from .adb import AdbDevice, list_devices
+from .execution import ExecutionManager, uses_text
 from .runner import RunControl, run_loop, validate_flow
-from .state import identifier, validate_state
+from .state import identifier, validate_state, image_component
 from .vision import Recognizer
 
 
@@ -29,11 +30,14 @@ def create_server(store, port=8765, adb='adb', ocr=None):
             raise OSError('截图/图片写入失败，请检查数据目录空间和权限')
 
     def lock_for(serial):
+        execution.refresh()
         with guard:
             return device_locks.setdefault(serial, threading.Lock())
 
+    execution = ExecutionManager(store, adb, {'enabled': ocr is not None, 'config_path': getattr(ocr, 'config_path', None)}, guard, lock_for)
+
     def mutation_allowed():
-        if any(run.get('live', False) for run in runs.values()):
+        if execution.active() or any(run.get('live', False) for run in runs.values()):
             raise ValueError('运行期间请停止流程后再修改 State 或资源')
 
     def capture_path(value):
@@ -59,7 +63,7 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                 referenced.add(state_id)
                 condition = known[state_id]['conditions']
                 pending.extend(condition['required_states'] + condition['excluded_states'])
-            if ocr is None and any(known[s]['recognition']['type'] == 'text' for s in referenced):
+            if ocr is None and any(uses_text(known[s]) for s in referenced):
                 raise ValueError('OCR 未配置，请使用 RapidOCR 启动工作台后运行文字 State')
             lock = lock_for(serial)
             if not lock.acquire(blocking=False):
@@ -128,36 +132,84 @@ def create_server(store, port=8765, adb='adb', ocr=None):
             raise
         return {'id': run_id}
 
+    def snapshot_states(flows):
+        known = {state['id']: state for state in store.load_all()}
+        needed, pending = set(), [sid for flow in flows for sid in flow.get('state_ids', [])]
+        while pending:
+            sid = pending.pop()
+            if sid in needed:
+                continue
+            if sid not in known:
+                raise ValueError('流程引用的 State 不存在')
+            needed.add(sid)
+            for key in ['required_states', 'excluded_states']:
+                pending.extend(known[sid]['conditions'][key])
+        return [known[sid] for sid in sorted(needed)]
+
     def start_task(body):
-        serials = body.get('serials')
-        if not isinstance(serials, list) or not serials or any(not isinstance(s, str) or not s.strip() for s in serials):
-            raise ValueError('请选择非空的设备 serial 列表')
-        serials = [serial.strip() for serial in serials]
-        if len(set(serials)) != len(serials):
-            raise ValueError('设备 serial 不能重复')
         with guard:
             task = next((t for t in store.list_tasks() if t['id'] == identifier(body.get('id'))), None)
             if task is None:
                 raise ValueError('任务不存在')
-            flow = next((f for f in store.list_flows() if f['id'] == task['flow_id']), None)
-            if flow is None:
+            known = {f['id']: f for f in store.list_flows()}
+            if any(fid not in known for fid in task['flow_ids']):
                 raise ValueError('任务关联的流程不存在')
-            states = store.load_all()
-        online = {device['serial'] for device in list_devices(adb) if device['status'] == 'device'}
-        batch_id = uuid4().hex
-        metadata = {'task_id': task['id'], 'task_name': task['name'], 'batch_id': batch_id}
-        results = []
-        for serial in serials:
-            try:
-                if serial not in online:
-                    raise ValueError('设备不在线或未授权')
-                result = start_run({'serial': serial, 'flow': flow}, states_snapshot=states, metadata=metadata)
-                results.append({'serial': serial, **result})
-            except Exception as error:
-                results.append({'serial': serial, 'error': str(error)})
-        return {'batch_id': batch_id, 'task_id': task['id'], 'results': results}
+            flows = [copy.deepcopy(known[fid]) for fid in task['flow_ids']]
+            states = snapshot_states(flows)
+            online = {d['serial'] for d in list_devices(adb) if d['status'] == 'device'}
+            return execution.start_batch(flows, states, body.get('serials'), online, task=task)
+
+    def start_debug(body):
+        with guard:
+            flow = copy.deepcopy(body.get('flow'))
+            if flow is None:
+                flow = next((f for f in store.list_flows() if f['id'] == body.get('flow_id')), None)
+            if not isinstance(flow, dict):
+                raise ValueError('请选择流程或传入当前流程草稿')
+            if 'dry_run' in body:
+                if not isinstance(body['dry_run'], bool):
+                    raise ValueError('dry_run 必须为布尔值')
+                flow['dry_run'] = body['dry_run']
+            states = snapshot_states([flow])
+            online = {d['serial'] for d in list_devices(adb) if d['status'] == 'device'}
+            return execution.start_batch([flow], states, body.get('serials'), online, mode=body.get('mode', 'auto'))
+
+    def save_state_with_crop(body):
+        state = copy.deepcopy(body.get('state'))
+        if not isinstance(state, dict):
+            raise ValueError('state 必须是对象')
+        if not state.get('id'):
+            state['id'] = uuid4().hex
+        asset_path = None
+        if 'box' in body or 'capture_id' in body:
+            image = cv2.imread(str(capture_path(body.get('capture_id'))))
+            if image is None:
+                raise ValueError('截图不存在')
+            box = body.get('box')
+            if not isinstance(box, list) or len(box) != 4 or any(type(v) is not int for v in box):
+                raise ValueError('框选坐标必须是四个整数')
+            left, top, right, bottom = box
+            if not 0 <= left < right <= image.shape[1] or not 0 <= top < bottom <= image.shape[0]:
+                raise ValueError('框选区域越界或为空')
+            component = image_component(state)
+            if component is None:
+                raise ValueError('裁剪模板需要图片识别配置')
+            asset_path = store.assets / (uuid4().hex + '.png')
+            component['asset'] = asset_path.name
+            state = validate_state(state)
+        try:
+            if asset_path is not None:
+                save_image(asset_path, image[top:bottom, left:right])
+            return store.save(state)
+        except Exception:
+            if asset_path is not None:
+                asset_path.unlink(missing_ok=True)
+            raise
 
     def run_detail(run_id, include_events=True):
+        config_path = store.runs / identifier(run_id) / 'config.json'
+        if config_path.exists() and json.loads(config_path.read_text(encoding='utf-8')).get('engine') == 'process':
+            return execution.detail(run_id, include_events)
         if run_id in runs:
             return {k: v for k, v in runs[run_id].items() if k not in {'cancel', 'thread', 'control'} and (include_events or k != 'events')}
         directory = store.runs / identifier(run_id)
@@ -229,6 +281,18 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                     with guard: return self.reply(store.list_flows())
                 if path == '/api/tasks':
                     with guard: return self.reply(store.list_tasks())
+                if path == '/api/batches':
+                    with guard:
+                        return self.reply([execution.batch_detail(p.stem) for p in sorted(execution.batches.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)])
+                if path.startswith('/api/batches/'):
+                    return self.reply(execution.batch_detail(path.split('/')[-1]))
+                for resource, loader in [('tasks', store.list_tasks), ('flows', store.list_flows), ('states', store.load_all)]:
+                    if path.startswith('/api/' + resource + '/'):
+                        resource_id = identifier(path.split('/')[-1])
+                        with guard:
+                            item = next((i for i in loader() if i['id'] == resource_id), None)
+                        if item is None: raise FileNotFoundError()
+                        return self.reply(item)
                 if path == '/api/runs':
                     with guard:
                         ids = {p.name for p in store.runs.iterdir() if p.is_dir() and (p / 'config.json').exists()} | set(runs)
@@ -303,14 +367,15 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                         lock.release()
                 if path in {'/api/groups', '/api/states/copy', '/api/states/delete', '/api/flows', '/api/flows/copy', '/api/flows/delete', '/api/tasks', '/api/tasks/delete'}:
                     with guard:
-                        mutation_allowed()
+                        if path not in {'/api/tasks', '/api/flows', '/api/flows/copy'}:
+                            mutation_allowed()
                         if path == '/api/groups': result = store.update_group(body.get('action'), body.get('name'), body.get('new_name'))
-                        elif path == '/api/states/copy': result = store.copy_state(body['id'], body['new_id'], body.get('name'), body.get('group'))
+                        elif path == '/api/states/copy': result = store.copy_state(body['id'], body.get('new_id'), body.get('name'), body.get('group'))
                         elif path == '/api/states/delete': result = store.delete_state(body['id'])
                         elif path == '/api/tasks': result = store.save_task(body)
                         elif path == '/api/tasks/delete': result = store.delete_task(body['id'])
                         elif path == '/api/flows': result = store.save_flow(body)
-                        elif path == '/api/flows/copy': result = store.copy_flow(body['id'], body['new_id'], body.get('name'))
+                        elif path == '/api/flows/copy': result = store.copy_flow(body['id'], body.get('new_id'), body.get('name'))
                         else: result = store.delete_flow(body['id'])
                         return self.reply(result)
                 if path == '/api/preview-group':
@@ -336,7 +401,19 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                                 else: device.execute(action, match, image)
                             return self.reply({'match': match, 'executed': True})
                         finally: lock.release()
+                if path == '/api/debug/start':
+                    return self.reply(start_debug(body))
+                if path == '/api/debug/control':
+                    return self.reply(execution.command(identifier(body.get('id')), body.get('action')))
+                if path == '/api/tasks/stop':
+                    return self.reply(execution.cancel_batch(identifier(body.get('batch_id'))))
+                if path == '/api/states/save':
+                    with guard:
+                        mutation_allowed()
+                        return self.reply(save_state_with_crop(body))
                 if path in {'/api/pause', '/api/resume'}:
+                    if identifier(body.get('id')) not in runs:
+                        return self.reply(execution.command(body['id'], 'pause' if path == '/api/pause' else 'resume'))
                     with guard:
                         run = runs.get(identifier(body['id']))
                         if not run or not run.get('live'): raise ValueError('运行已经结束，不能暂停或继续')
@@ -366,7 +443,7 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                     image = cv2.imread(str(capture_path(body['capture_id'])))
                     if image is None:
                         raise ValueError('截图不存在')
-                    return self.reply(Recognizer(store, ocr).match(image, validate_state(body['state'])))
+                    return self.reply(Recognizer(store, ocr).match(image, validate_state({'id': uuid4().hex, **body['state']})))
                 if path == '/api/flow':
                     with guard:
                         mutation_allowed()
@@ -382,6 +459,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                 if path == '/api/run':
                     return self.reply(start_run(body))
                 if path == '/api/cancel':
+                    if identifier(body.get('id')) not in runs:
+                        return self.reply(execution.command(body['id'], 'cancel'))
                     with guard:
                         runs[identifier(body['id'])]['cancel'].set()
                     return self.reply({'ok': True})
@@ -392,6 +471,7 @@ def create_server(store, port=8765, adb='adb', ocr=None):
     server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
 
     def stop_runs():
+        execution.close()
         with guard:
             active = list(runs.values())
             for run in active:

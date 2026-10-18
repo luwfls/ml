@@ -132,3 +132,7 @@ Windows 将 `.venv/bin/python` 换成 `.\.venv\Scripts\python.exe`。`requiremen
 
 下一步：选一条供应链小程序及一条 POS 用例验证 → 逐步补有序流程和业务断言。
 Windows 测试机可双击 `start-windows.cmd` 启动，首次准备和参数说明见 [Windows 部署指南](docs/windows-deployment.md)。发布部署包带前端构建；从源码启动需 Node.js LTS。
+
+### 已确认页面的后端接口
+
+State 组合识别、随机区域点击、方向滑动、扩展按键，多流程任务顺序执行、每设备独立进程、任务批次查询/终止，以及步进/自动流程调试的完整请求与响应约定见 [后端接口说明](docs/backend-api.md)。新页面请使用 `/api/debug/start` 与 `/api/tasks/start`；本次不变更生产 Vue 页面的布局和接线。

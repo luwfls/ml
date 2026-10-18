@@ -19,23 +19,28 @@ def number(value, low, high):
     return value
 
 
-def validate_state(data):
-    if not isinstance(data, dict):
-        raise ValueError('State 必须是对象')
-    data = copy.deepcopy(data)
-    identifier(data.get('id'))
-    data.setdefault('name', data['id'])
-    data.setdefault('group', '')
-    if not isinstance(data['group'], str) or len(data['group']) > 200:
-        raise ValueError('分组名必须为字符串，最多 200 字')
-    data.setdefault('role', 'normal')
-    if data['role'] not in {'normal', 'success', 'failure', 'fallback'}:
-        raise ValueError('无效 State role')
-    data.setdefault('priority', 0)
-    number(data['priority'], -10000, 10000)
-    recognition = data.get('recognition', {})
+def validate_region(region):
+    if not isinstance(region, list) or len(region) != 4:
+        raise ValueError('区域必须是四个归一化坐标')
+    for value in region:
+        number(value, 0, 1)
+    if region[0] >= region[2] or region[1] >= region[3]:
+        raise ValueError('区域不能为空')
+
+
+def validate_recognition(recognition):
     if not isinstance(recognition, dict):
         raise ValueError('recognition 必须是对象')
+    if recognition.get('type') == 'combined':
+        if recognition.get('operator') not in {'and', 'or'}:
+            raise ValueError('组合识别 operator 必须为 and 或 or')
+        for kind in ['image', 'text']:
+            component = recognition.get(kind)
+            if not isinstance(component, dict):
+                raise ValueError('组合识别需要 image 和 text 配置')
+            component['type'] = kind
+            validate_recognition(component)
+        return
     if recognition.get('type') == 'image':
         if 'texts' in recognition or not isinstance(recognition.get('asset'), str):
             raise ValueError('图片 State 只配置 asset，不配置 texts')
@@ -60,14 +65,35 @@ def validate_state(data):
         number(recognition.setdefault('similarity_threshold', .85), .01, 1)
         number(recognition.setdefault('min_confidence', .8), 0, 1)
     else:
-        raise ValueError('识别类型必须为 image 或 text')
-    region = recognition.setdefault('region', [0, 0, 1, 1])
-    if not isinstance(region, list) or len(region) != 4:
-        raise ValueError('ROI 必须是四个归一化坐标')
-    for coordinate in region:
-        number(coordinate, 0, 1)
-    if region[0] >= region[2] or region[1] >= region[3]:
-        raise ValueError('ROI 不能为空')
+        raise ValueError('识别类型必须为 image、text 或 combined')
+    validate_region(recognition.setdefault('region', [0, 0, 1, 1]))
+
+
+def image_component(state):
+    recognition = state['recognition']
+    return recognition.get('image') if recognition['type'] == 'combined' else recognition if recognition['type'] == 'image' else None
+
+
+def validate_state(data):
+    if not isinstance(data, dict):
+        raise ValueError('State 必须是对象')
+    data = copy.deepcopy(data)
+    identifier(data.get('id'))
+    data.setdefault('name', data['id'])
+    if not isinstance(data['name'], str) or not data['name'].strip():
+        raise ValueError('State 名称不能为空')
+    data.setdefault('group', '')
+    if not isinstance(data['group'], str) or len(data['group']) > 200:
+        raise ValueError('分组名必须为字符串，最多 200 字')
+    data.setdefault('role', 'normal')
+    if data['role'] not in {'normal', 'success', 'failure', 'fallback'}:
+        raise ValueError('无效 State role')
+    data.setdefault('priority', 1.0)
+    number(data['priority'], -10000, 10000)
+    if abs(data['priority'] * 100 - round(data['priority'] * 100)) > 1e-8:
+        raise ValueError('优先级最多两位小数')
+    recognition = data.get('recognition', {})
+    validate_recognition(recognition)
     actions = data.setdefault('actions', [])
     if not isinstance(actions, list):
         raise ValueError('actions 必须是列表')
@@ -82,17 +108,26 @@ def validate_state(data):
                 number(value, -100, 100)
             if box[0] >= box[2] or box[1] >= box[3]:
                 raise ValueError('点击区不能为空')
-        if action['type'] == 'key' and action.get('key') not in {'back', 'home', 'enter'}:
-            raise ValueError('按键支持 back/home/enter')
+        if action['type'] == 'click_match' and 'click_region' in action:
+            validate_region(action['click_region'])
+        if action['type'] == 'key':
+            key = action.get('key')
+            if not isinstance(key, str) or (key.lower() not in {'back', 'home', 'enter', 'space'} and not re.fullmatch('[a-zA-Z]', key)):
+                raise ValueError('按键支持 back/home/enter/space 或单个英文字母')
+            action['key'] = key.lower()
         if action['type'] == 'wait':
             number(action.get('ms', 500), 0, 10000)
         if action['type'] == 'swipe':
             points = action.get('points')
-            if not isinstance(points, list) or len(points) != 4:
-                raise ValueError('swipe 需要四个归一化 points 坐标')
-            for point in points:
-                number(point, 0, 1)
-            number(action.get('duration_ms', 300), 1, 10000)
+            if points is not None:
+                if not isinstance(points, list) or len(points) != 4:
+                    raise ValueError('swipe 需要四个归一化 points 坐标')
+                for point in points:
+                    number(point, 0, 1)
+            elif action.get('direction') not in {'up', 'down', 'left', 'right'}:
+                raise ValueError('swipe 需要方向或 points')
+            number(action.setdefault('distance', .6), .01, 1)
+            number(action.setdefault('duration_ms', 300), 1, 10000)
     inputs = [i for i, action in enumerate(actions) if action['type'] != 'wait']
     if len(inputs) > 1 or (inputs and inputs[0] != 0):
         raise ValueError('首版每个 State 最多一个输入动作，等待只能放在输入之后；后续操作由新截图驱动')
@@ -123,6 +158,9 @@ class Store:
             path.mkdir(parents=True, exist_ok=True)
 
     def save(self, data):
+        if not isinstance(data, dict): raise ValueError('State 必须是对象')
+        data = copy.deepcopy(data)
+        if not data.get('id'): data['id'] = uuid4().hex
         data = validate_state(data)
         path = self.states / (data['id'] + '.json')
         temporary = path.with_suffix('.tmp')
@@ -198,11 +236,12 @@ class Store:
                     copied.update(id=ids[state['id']], group=target)
                     for key in ['required_states', 'excluded_states']:
                         copied['conditions'][key] = [ids.get(ref, ref) for ref in copied['conditions'][key]]
-                    if copied['recognition']['type'] == 'image':
+                    image = image_component(copied)
+                    if image is not None:
                         asset = uuid4().hex + '.png'
                         created_assets.append(self.assets / asset)
-                        shutil.copyfile(self.assets / copied['recognition']['asset'], self.assets / asset)
-                        copied['recognition']['asset'] = asset
+                        shutil.copyfile(self.assets / image['asset'], self.assets / asset)
+                        image['asset'] = asset
                     staged.append(copied)
                 for copied in staged: self.save(copied)
             except Exception:
@@ -218,8 +257,8 @@ class Store:
         self.write_json(self.root / 'groups.json', sorted(groups))
         return {'ok': True}
 
-    def copy_state(self, source, new_id, name=None, group=None):
-        source, new_id = identifier(source), identifier(new_id)
+    def copy_state(self, source, new_id=None, name=None, group=None):
+        source, new_id = identifier(source), identifier(new_id or uuid4().hex)
         if (self.states / (new_id + '.json')).exists():
             raise ValueError('State ID 已存在')
         state = next((s for s in self.load_all() if s['id'] == source), None)
@@ -228,15 +267,16 @@ class Store:
         state['id'] = new_id
         if name is not None: state['name'] = name
         if group is not None: state['group'] = group
-        if state['recognition']['type'] == 'image':
+        image = image_component(state)
+        if image is not None:
             asset = uuid4().hex + '.png'
-            shutil.copyfile(self.assets / state['recognition']['asset'], self.assets / asset)
-            state['recognition']['asset'] = asset
+            shutil.copyfile(self.assets / image['asset'], self.assets / asset)
+            image['asset'] = asset
         try:
             return self.save(state)
         except Exception:
-            if state['recognition']['type'] == 'image':
-                (self.assets / state['recognition']['asset']).unlink(missing_ok=True)
+            if image is not None:
+                (self.assets / image['asset']).unlink(missing_ok=True)
             (self.states / (new_id + '.tmp')).unlink(missing_ok=True)
             raise
 
@@ -265,32 +305,42 @@ class Store:
 
     def save_flow(self, flow):
         from .runner import validate_flow
+        if not isinstance(flow, dict): raise ValueError('流程必须是对象')
         flow = copy.deepcopy(flow)
-        identifier(flow.get('id'))
+        if not flow.get('id'): flow['id'] = uuid4().hex
+        identifier(flow['id'])
         flow.setdefault('name', flow['id'])
+        if not isinstance(flow['name'], str) or not flow['name'].strip():
+            raise ValueError('流程名称不能为空')
         validate_flow(flow, self.load_all())
         self.write_json(self.flows / (flow['id'] + '.json'), flow)
         return flow
 
-    def copy_flow(self, source, new_id, name=None):
-        identifier(new_id)
+    def copy_flow(self, source, new_id=None, name=None):
+        new_id = identifier(new_id or uuid4().hex)
         if (self.flows / (new_id + '.json')).exists():
             raise ValueError('流程 ID 已存在')
         flow = next((f for f in self.list_flows() if f['id'] == identifier(source)), None)
         if flow is None: raise ValueError('流程不存在')
-        return self.save_flow({**flow, 'id': new_id, 'name': name or flow['name']})
+        return self.save_flow({**flow, 'id': new_id, 'name': flow['name'] if name is None else name})
 
     def delete_flow(self, flow_id):
         flow_id = identifier(flow_id)
-        if any(task['flow_id'] == flow_id for task in self.list_tasks()):
+        if any(flow_id in task['flow_ids'] for task in self.list_tasks()):
             raise ValueError('流程被任务引用，不能删除')
         (self.flows / (flow_id + '.json')).unlink()
         return {'ok': True}
 
     def list_tasks(self):
-        return [json.loads(path.read_text(encoding='utf-8')) for path in sorted(self.tasks.glob('*.json'))]
+        tasks = [json.loads(path.read_text(encoding='utf-8')) for path in sorted(self.tasks.glob('*.json'))]
+        for task in tasks:
+            task.setdefault('flow_ids', [task['flow_id']] if task.get('flow_id') else [])
+            task.setdefault('revision', 1)
+            if task['flow_ids']: task['flow_id'] = task['flow_ids'][0]
+        return tasks
 
     def save_task(self, task):
+        if not isinstance(task, dict): raise ValueError('任务必须是对象')
         task_id = task.get('id')
         if task_id is None or task_id == '':
             task_id = uuid4().hex
@@ -298,10 +348,19 @@ class Store:
         name = task.get('name')
         if not isinstance(name, str) or not name.strip() or len(name) > 200:
             raise ValueError('任务名称不能为空且最多 200 字')
-        flow_id = identifier(task.get('flow_id'))
-        if not any(flow['id'] == flow_id for flow in self.list_flows()):
-            raise ValueError('流程不存在')
-        saved = {'id': task_id, 'name': name.strip(), 'flow_id': flow_id}
+        existing = next((item for item in self.list_tasks() if item['id'] == task_id), None)
+        flow_ids = task.get('flow_ids', [task['flow_id']] if task.get('flow_id') else [])
+        # Legacy clients echo unknown fields but edit only the single-flow selector.
+        if existing and flow_ids == existing['flow_ids'] and task.get('flow_id', existing['flow_id']) != existing['flow_id']:
+            flow_ids = [task['flow_id']]
+        if not isinstance(flow_ids, list) or not flow_ids:
+            raise ValueError('任务必须选择至少一个流程')
+        available = {flow['id'] for flow in self.list_flows()}
+        for flow_id in flow_ids:
+            if identifier(flow_id) not in available:
+                raise ValueError('流程不存在')
+        saved = {**copy.deepcopy(task), 'id': task_id, 'name': name.strip(), 'flow_ids': list(flow_ids),
+                 'flow_id': flow_ids[0], 'revision': existing['revision'] + 1 if existing else 1}
         self.write_json(self.tasks / (task_id + '.json'), saved)
         return saved
 

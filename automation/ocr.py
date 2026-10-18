@@ -11,6 +11,8 @@ class RapidOcrProvider:
     def __init__(self, config_path=None):
         import rapidocr
 
+        self.config_path = str(Path(config_path).expanduser().resolve()) if config_path is not None else None
+
         params = {
             'Global.text_score': 0,
             'EngineConfig.onnxruntime.use_cuda': False,
