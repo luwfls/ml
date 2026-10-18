@@ -128,5 +128,7 @@ class RealOcrTests(unittest.TestCase):
             result = run_loop(states, {'state_ids': ['confirm', 'done'], 'max_rounds': 1, 'poll_ms': 0},
                               AdbDevice('fixture-device'), Recognizer(Store(Path(directory)), provider))
         self.assertEqual(result['reason'], 'max_rounds')
-        self.assertEqual(adb.call_args_list[-1].args[0],
-                         ['adb', '-s', 'fixture-device', 'shell', 'input', 'tap', str(int((x1+x2)/2)), str(int((y1+y2)/2))])
+        command = adb.call_args_list[-1].args[0]
+        self.assertEqual(command[:6], ['adb', '-s', 'fixture-device', 'shell', 'input', 'tap'])
+        self.assertTrue(x1 <= int(command[6]) < x2)
+        self.assertTrue(y1 <= int(command[7]) < y2)

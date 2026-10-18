@@ -5,6 +5,10 @@ from .state import number, validate_state
 
 
 def validate_flow(flow, states):
+    if not isinstance(flow, dict):
+        raise ValueError('流程必须是对象')
+    if 'dry_run' in flow and not isinstance(flow['dry_run'], bool):
+        raise ValueError('dry_run 必须为布尔值')
     known = {s['id']: s for s in states}
     ids = flow.get('state_ids')
     if not isinstance(ids, list) or not ids or any(s not in known for s in ids):
@@ -89,6 +93,8 @@ def run_loop(states, flow, device, matcher, cancel=None, emit=None, control=None
     result = {'status': 'failed', 'reason': 'max_rounds', 'success_count': 0, 'dry_run': bool(flow.get('dry_run', False))}
     round_index = 0
     while round_index < flow.get('max_rounds', 200):
+        if control is not None and hasattr(control, 'begin_round'):
+            deadline += control.begin_round()
         checkpoint()
         if cancel.is_set():
             result.update(status='cancelled', reason='user_cancelled')

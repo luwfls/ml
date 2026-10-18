@@ -51,9 +51,23 @@ class Recognizer:
         if data['id'] in self.results:
             return self.results[data['id']]
         recognition = data['recognition']
+        if recognition['type'] == 'combined':
+            components = {kind: self._match_component(frame, recognition[kind]) for kind in ['image', 'text']}
+            selected = components['image'] if components['image']['found'] else components['text']
+            result = dict(selected)
+            found = [component['found'] for component in components.values()]
+            result['found'] = all(found) if recognition['operator'] == 'and' else any(found)
+            result['components'] = components
+        else:
+            result = self._match_component(frame, recognition)
+        result['state_id'] = data['id']
+        self.results[data['id']] = result
+        return result
+
+    def _match_component(self, frame, recognition):
         height, width = frame.shape[:2]
         left, top, right, bottom = [int(v * size) for v, size in zip(recognition['region'], [width, height, width, height])]
-        result = {'found': False, 'bbox': None, 'score': 0, 'ambiguous': False, 'state_id': data['id']}
+        result = {'found': False, 'bbox': None, 'score': 0, 'ambiguous': False}
         if right <= left or bottom <= top:
             raise ValueError('ROI 在当前截图上为空')
         if recognition['type'] == 'image':
@@ -108,5 +122,4 @@ class Recognizer:
                 best = max(candidates, key=lambda item: item['score'])
                 result.update(found=True, bbox=best['bbox'], score=best['score'], text=best['text'],
                               confidence=best['confidence'], ambiguous=len(candidates) > 1)
-        self.results[data['id']] = result
         return result
