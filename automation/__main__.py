@@ -12,6 +12,7 @@ def main():
     parser = argparse.ArgumentParser(description='安卓 State 自动化工作台')
     parser.add_argument('--data', type=Path, default=Path('data'))
     parser.add_argument('--adb', default='adb')
+    parser.add_argument('--no-adb', action='store_true', help='纯平台模式，禁用设备发现、截图和执行')
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--ocr-config', type=Path, help='本地 OCR 模型 JSON 配置；不指定时使用锁定版本随包提供的模型')
     parser.add_argument('--no-ocr', action='store_true', help='仅图片模式，不加载 OCR')
@@ -23,7 +24,7 @@ def main():
         from .ocr import RapidOcrProvider
         print('加载本地 RapidOCR CPU 模型', flush=True)
         provider = RapidOcrProvider(args.ocr_config)
-    server = create_server(Store(args.data), args.port, args.adb, ocr=provider)
+    server = create_server(Store(args.data), args.port, None if args.no_adb else args.adb, ocr=provider)
     print(f'工作台 http://127.0.0.1:{server.server_port}；OCR {"RapidOCR CPU" if provider else "disabled"}', flush=True)
     try:
         server.serve_forever()

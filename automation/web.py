@@ -44,6 +44,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
         return store.captures / (identifier(value) + '.png')
 
     def start_run(body, states_snapshot=None, metadata=None):
+        if adb is None:
+            raise ValueError('纯平台模式未启用 ADB，无法执行设备操作')
         serial = body.get('serial', '')
         device = AdbDevice(serial, executable=adb)
         serial = device.serial
@@ -147,6 +149,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
         return [known[sid] for sid in sorted(needed)]
 
     def start_task(body):
+        if adb is None:
+            raise ValueError('纯平台模式未启用 ADB，无法启动设备任务')
         with guard:
             task = next((t for t in store.list_tasks() if t['id'] == identifier(body.get('id'))), None)
             if task is None:
@@ -160,6 +164,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
             return execution.start_batch(flows, states, body.get('serials'), online, task=task)
 
     def start_debug(body):
+        if adb is None:
+            raise ValueError('纯平台模式未启用 ADB，无法启动设备调试')
         with guard:
             flow = copy.deepcopy(body.get('flow'))
             if flow is None:
@@ -271,7 +277,7 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                 if path == '/api/health':
                     return self.reply({'python_bits': struct.calcsize('P') * 8, 'ocr': 'ready' if ocr is not None else 'disabled'})
                 if path == '/api/devices':
-                    return self.reply(list_devices(adb))
+                    return self.reply([] if adb is None else list_devices(adb))
                 if path == '/api/states':
                     with guard:
                         return self.reply(store.load_all())
@@ -343,6 +349,8 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                 if not isinstance(body, dict):
                     raise ValueError('请求必须为 JSON 对象')
                 path = urlparse(self.path).path
+                if adb is None and path in {'/api/capture', '/api/execute'}:
+                    raise ValueError('纯平台模式未启用 ADB，无法执行设备操作')
                 if path == '/api/import':
                     raw = base64.b64decode(body.get('png', ''), validate=True)
                     if not raw.startswith(b'\x89PNG\r\n\x1a\n'):
