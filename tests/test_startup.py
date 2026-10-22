@@ -9,10 +9,53 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.start import build_frontend, install_python, validate_python, check_port, server_command, run_server
+from scripts.start import build_frontend, install_python, validate_python, check_port, server_command, run_server, main
 
 
 class StartupTests(unittest.TestCase):
+    def test_platform_setup_skips_adb_and_selects_minimal_dependencies(self):
+        previous = Path.cwd()
+        try:
+            with patch('scripts.start.find_adb') as adb, \
+                 patch('scripts.start.run'), \
+                 patch('scripts.start.install_python') as install, \
+                 patch('scripts.start.build_frontend') as build, \
+                 patch('scripts.start.run_server') as server:
+                self.assertEqual(main(['--platform-only', '--setup-only']), 0)
+                adb.assert_not_called()
+                self.assertTrue(install.call_args.kwargs['platform_only'])
+                build.assert_called_once()
+                server.assert_not_called()
+        finally:
+            os.chdir(previous)
+
+    def test_platform_server_disables_adb_and_ocr(self):
+        previous = Path.cwd()
+        try:
+            with patch('scripts.start.find_adb') as adb, \
+                 patch('scripts.start.run'), \
+                 patch('scripts.start.check_port'), \
+                 patch('scripts.start.install_python'), \
+                 patch('scripts.start.build_frontend'), \
+                 patch('scripts.start.run_server', return_value=0) as server:
+                self.assertEqual(main(['--platform-only', '--port', '8766']), 0)
+                adb.assert_not_called()
+                command = server.call_args.args[0]
+                self.assertIn('--no-adb', command)
+                self.assertIn('--no-ocr', command)
+                self.assertIn('8766', command)
+        finally:
+            os.chdir(previous)
+
+    def test_platform_install_uses_only_platform_requirements(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.venv').mkdir()
+            (root / 'requirements-platform.txt').write_text('numpy==2.5.3\nopencv-python==5.0.0.93\n')
+            with patch('scripts.start.run') as run:
+                install_python(root, 'python', platform_only=True)
+                self.assertEqual(run.call_args_list[0].args[0][-1], root / 'requirements-platform.txt')
+
     @unittest.skipIf(os.name == 'nt', 'POSIX signal delivery; Windows console requires real-machine validation')
     def test_interrupt_waits_for_real_backend_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:

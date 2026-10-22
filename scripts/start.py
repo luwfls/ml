@@ -34,8 +34,8 @@ def cached(marker, value):
     return marker.is_file() and marker.read_text(encoding='ascii').strip() == value
 
 
-def install_python(root, python, refresh=False):
-    requirements = root / 'requirements-tested.txt'
+def install_python(root, python, refresh=False, platform_only=False):
+    requirements = root / ('requirements-platform.txt' if platform_only else 'requirements-tested.txt')
     value = fingerprint(root, [requirements])
     marker = root / '.venv' / 'startup-requirements.sha256'
     if refresh or not cached(marker, value):
@@ -102,6 +102,8 @@ def find_adb(root, value):
 
 def server_command(python, adb, args):
     command = [str(python), '-m', 'automation', '--adb', str(adb), '--data', 'data', '--port', str(args.port)]
+    if getattr(args, 'platform_only', False):
+        command.append('--no-adb')
     if args.no_ocr:
         command.append('--no-ocr')
     if args.ocr_config:
@@ -130,9 +132,12 @@ def main(argv=None):
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--ocr-config', type=Path)
     parser.add_argument('--no-ocr', action='store_true')
+    parser.add_argument('--platform-only', action='store_true', help='Serve the platform without ADB or OCR; install image dependencies only')
     parser.add_argument('--setup-only', action='store_true', help='Prepare dependencies/build without running the server')
     parser.add_argument('--refresh', action='store_true', help='Reinstall locked dependencies and rebuild frontend')
     args = parser.parse_args(argv)
+    if args.platform_only:
+        args.no_ocr = True
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
     try:
@@ -145,7 +150,7 @@ def main(argv=None):
             raise RuntimeError('OCR config file does not exist. Paths are relative to the project directory.')
         if not args.setup_only:
             check_port(args.port)
-        adb = find_adb(root, args.adb)
+        adb = 'adb' if args.platform_only else find_adb(root, args.adb)
         environment = root / '.venv'
         python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
         if not python.is_file():
@@ -154,7 +159,7 @@ def main(argv=None):
             run([sys.executable, '-m', 'venv', environment])
         probe = "import struct,sys,sysconfig; assert sys.version_info[:2]==(3,14) and struct.calcsize('P')*8==64 and not sysconfig.get_config_var('Py_GIL_DISABLED'), 'Rename incompatible .venv and restart'"
         run([python, '-c', probe])
-        install_python(root, python, args.refresh)
+        install_python(root, python, args.refresh, platform_only=args.platform_only)
         build_frontend(root, args.refresh)
         if args.setup_only:
             print('Setup complete. No server was started.', flush=True)

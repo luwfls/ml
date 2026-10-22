@@ -44,6 +44,26 @@ class WebTests(unittest.TestCase):
         saved = self.request('/api/states', data)
         self.assertEqual(self.request('/api/states'), [saved])
 
+    def test_platform_mode_works_without_any_adb_calls(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join()
+        self.server = create_server(self.store, port=0, adb=None)
+        self.thread = threading.Thread(target=self.server.serve_forever)
+        self.thread.start()
+        self.url = f'http://127.0.0.1:{self.server.server_port}'
+        with patch('automation.web.list_devices', side_effect=AssertionError('ADB called')), \
+             patch('automation.web.AdbDevice', side_effect=AssertionError('ADB called')):
+            self.assertEqual(self.request('/api/devices'), [])
+            self.test_health_and_state_roundtrip()
+            self.test_crop_and_preview_without_device()
+            self.test_built_frontend_assets_are_served()
+            for route in ['/api/capture', '/api/execute', '/api/run', '/api/tasks/start', '/api/debug/start']:
+                with self.assertRaises(HTTPError) as error:
+                    self.request(route, {'serial': 'one'})
+                self.assertIn('纯平台模式', json.load(error.exception)['error'])
+                error.exception.close()
+
     def test_text_preview_and_flow_use_same_provider(self):
         calls = []
         def ocr(frame):
