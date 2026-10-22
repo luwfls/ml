@@ -39,3 +39,13 @@
 - 假 ADB 客户端延迟退出测试验证取消会回收该客户端再释放设备。未使用全局 adb kill-server 或按程序名杀进程。
 - 本地真实 RapidOCR 测试仍通过；ADB 使用可执行替身和固定 PNG，未完成真实 Android/POS 或 Windows 主机验收。
 - 新接口见 `docs/backend-api.md`；旧 `/api/run` 仍为兼容线程入口，新任务和多设备调试采用每设备独立进程。
+
+## 2026-10-22：已确认 A 工作台落地
+
+- `node --test tests/frontend-model.test.mjs tests/frontend-tasks.test.mjs`：32 项通过。新增组合识别往返、ROI 默认/关闭/重开/重新框选、旧分离范围兼容、模板替换、点击区恢复及 OR 独立点击限制回归。
+- `PYTHONPATH=tests .venv/bin/python -m unittest tests/test_[!o]*.py`：82 项通过。使用 Python 3.14.4、requirements-platform.txt；不包含依赖真实 RapidOCR/ONNX 模型的 test_ocr.py。
+- `npm run build`：通过，仍有既有大包体积提示。
+- `tests/browser_smoke.py`：Chromium + 真实 HTTP 后端通过。验证左右同屏/窄屏布局、图片/文字/AND/OR 保存、ROI 与框选恢复、重新框选自动裁剪、取消不覆盖旧模板、独立点击、流程及双设备任务暂停停止。无页面异常。进程任务使用本地 fake-adb，不连接真机。
+- 默认精确 ROI 新增 1080×1920 原图匹配回归，先复现浮点截断丢失 1 像素，再改用 round 恢复像素边界。
+- 独立审查发现的精确 ROI 边界、OR 文字兜底点击锚点问题已修复并复核。OR 的图片相对独立点击区在界面和保存入口被拒绝，可选择匹配中心或 AND。
+- 未做 Windows/Mac 实机与真实安卓/OCR 端到端验收。

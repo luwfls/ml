@@ -144,3 +144,63 @@ test('group rename updates current unsaved draft and original group without disc
     await app.methods.groupAction.call(context,'rename');assert.equal(context.editor.group,'新分组');assert.equal(context.editor.original.group,'新分组');assert.equal(context.editor.name,'未保存名称');
   } finally {globalThis.fetch=originalFetch;}
 });
+
+test('combined recognition round-trips both settings and unknown component fields',()=>{
+  const state={id:'dual',recognition:{type:'combined',operator:'or',custom:7,image:{type:'image',asset:'a.png',threshold:.91,scales:[.9,1],region:[.1,.2,.8,.9]},text:{type:'text',texts:['成功','完成'],mode:'contains',min_confidence:.7,region:[.1,.2,.8,.9]}}};
+  const editor=model.editState(state);
+  assert.equal(editor.asset,'a.png');assert.equal(editor.texts,'成功\n完成');assert.equal(editor.operator,'or');
+  const result=model.saveState(editor);
+  assert.equal(result.recognition.type,'combined');assert.equal(result.recognition.custom,7);
+  assert.deepEqual(result.recognition.image.scales,[.9,1]);assert.deepEqual(result.recognition.text.texts,['成功','完成']);
+  assert.equal(result.recognition.image.threshold,.91);assert.equal(result.recognition.text.mode,'contains');
+});
+test('new State limits both recognition components to selected area by default and restores switch',()=>{
+  const editor=model.editState();editor.id='new';editor.name='new';editor.kind='combined';editor.asset='a.png';editor.texts='成功\n完成';
+  assert.equal(editor.roiEnabled,true);
+  assert.throws(()=>model.saveState(editor),/识别区/);
+  editor.recognitionBox=[.1,.2,.6,.7];
+  let saved=model.saveState(editor);
+  assert.deepEqual(saved.recognition.image.region,editor.recognitionBox);assert.deepEqual(saved.recognition.text.region,editor.recognitionBox);
+  editor.roiEnabled=false;saved=model.saveState(editor);
+  assert.deepEqual(saved.recognition.image.region,[0,0,1,1]);assert.deepEqual(saved.recognition.text.region,[0,0,1,1]);
+  const restored=model.editState(saved);assert.equal(restored.roiEnabled,false);assert.deepEqual(restored.recognitionBox,[.1,.2,.6,.7]);
+  restored.roiEnabled=true;restored.recognitionBox=[.2,.3,.8,.9];
+  saved=model.saveState(restored);assert.deepEqual(saved.recognition.image.region,[.2,.3,.8,.9]);
+});
+test('legacy combined State retains separately configured search regions until explicitly reframed',()=>{
+  const state={id:'legacy',recognition:{type:'combined',operator:'and',image:{asset:'a.png',region:[0,0,.5,.5]},text:{texts:['OK'],region:[.5,.5,1,1]}}};
+  const saved=model.saveState(model.editState(state));
+  assert.deepEqual(saved.recognition.image.region,[0,0,.5,.5]);assert.deepEqual(saved.recognition.text.region,[.5,.5,1,1]);
+});
+test('saving a reframed State replaces its existing image template',async()=>{
+  const app=await component('App.vue'),originalFetch=globalThis.fetch;let cropped=false,saved;
+  globalThis.fetch=async(path,options)=>{saved=JSON.parse(options.body);return {ok:true,json:async()=>saved};};
+  try {
+    const editor=model.editState({id:'a',recognition:{type:'image',asset:'old.png'}});editor.recognitionDirty=true;editor.recognitionBox=[.1,.2,.5,.6];
+    const context={editor,locked:false,busy:false,canCrop:true,selection:{recognition:[10,20,50,60],click:[]},captureId:'c',cropAsset:async draft=>{cropped=true;draft.asset='new.png';},reloadCatalog:async()=>{},$message:{success:()=>{}}};
+    await app.methods.persistState.call(context);assert.equal(cropped,true);assert.equal(saved.recognition.asset,'new.png');
+  } finally {globalThis.fetch=originalFetch;}
+});
+test('restoring recognition and relative click regions draws both boxes on resized screenshot',async()=>{
+  const canvas=await component('components/CaptureCanvas.vue');let selection;
+  const context={size:[1000,500],recognitionBox:[.1,.2,.3,.4],targetBox:[1.5,-1,2,0],$emit:(_,value)=>selection=value,$nextTick:()=>{}};
+  canvas.methods.restore.call(context);
+  assert.deepEqual(selection.recognition,[100,100,300,200]);
+  assert.deepEqual(selection.click,[400,0,500,100]);
+});
+test('legacy independent regions survive repeated save and reopen',()=>{
+  let state={id:'legacy',recognition:{type:'combined',operator:'and',image:{asset:'a.png',region:[0,0,.5,.5]},text:{texts:['OK'],region:[.5,.5,1,1]}}};
+  for(let i=0;i<3;i++)state=model.saveState(model.editState(state));
+  assert.deepEqual(state.recognition.text.region,[.5,.5,1,1]);
+});
+test('combined OR cannot apply a click target anchored to a possibly missing image',()=>{
+  const editor=model.editState({id:'dual',recognition:{type:'combined',operator:'or',image:{asset:'a.png'},text:{texts:['OK']}},actions:[{type:'click_match',target_box:[2,0,3,1]}]});
+  assert.throws(()=>model.saveState(editor),/独立点击区/);
+  editor.operator='and';assert.deepEqual(model.saveState(editor).actions[0].target_box,[2,0,3,1]);
+});
+test('clearing the click area removes the unsaved relative target without clearing recognition',async()=>{
+  const app=await component('App.vue');const action={type:'click_match',target_box:[1,0,2,1]};
+  const context={locked:false,editor:{actions:[action],recognitionBox:[.1,.2,.3,.4]},$delete:(object,key)=>delete object[key]};
+  app.methods.updateSelection.call(context,{mode:'click',click:[],recognition:[10,20,30,40],size:[100,100]});
+  assert.equal(action.target_box,undefined);assert.deepEqual(context.editor.recognitionBox,[.1,.2,.3,.4]);
+});

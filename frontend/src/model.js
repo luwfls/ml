@@ -1,17 +1,32 @@
 export const clone = value => JSON.parse(JSON.stringify(value));
+const fullRegion = [0,0,1,1];
 export function editState(state = {}) {
-  const original = clone(state), r = state.recognition || {};
+  const original = clone(state), r = state.recognition || {}, image = r.type==='combined' ? r.image : r.type==='image' ? r : {}, text = r.type==='combined' ? r.text : r.type==='text' ? r : {};
+  const region = r.type==='combined' ? image.region || fullRegion : r.region || fullRegion;
+  const ui = state.workbench || {};
   return {...clone(state), original, id:state.id || '', name:state.name || '', group:state.group || '', role:state.role || 'normal', priority:state.priority || 0,
-    kind:r.type || 'image', asset:r.asset || '', texts:(r.texts || []).join('\n'), mode:r.mode || 'exact', threshold:r.threshold ?? .85,
-    min_confidence:r.min_confidence ?? .8, similarity_threshold:r.similarity_threshold ?? .85, region:clone(r.region || [0,0,1,1]),
+    kind:r.type || 'image', operator:r.operator || 'and', asset:image.asset || '', texts:(text.texts || []).join('\n'), mode:text.mode || 'exact', threshold:image.threshold ?? .85,
+    min_confidence:text.min_confidence ?? .8, similarity_threshold:text.similarity_threshold ?? .85, region:clone(region),
+    roiEnabled:ui.roi_enabled ?? (!state.recognition || JSON.stringify(region)!==JSON.stringify(fullRegion)),
+    recognitionBox:clone(ui.recognition_region || (JSON.stringify(region)!==JSON.stringify(fullRegion) ? region : [])), recognitionDirty:false,
     actions:clone(state.actions || []), conditions:{...clone(state.conditions || {}),required_states:clone(state.conditions?.required_states || []),excluded_states:clone(state.conditions?.excluded_states || [])}};
 }
 export function saveState(editor) {
-  const old = editor.original || {}, previous = old.recognition?.type === editor.kind ? clone(old.recognition) : {};
-  const recognition = {...previous,type:editor.kind,region:clone(editor.region)};
-  if(editor.kind === 'image') {delete recognition.texts; Object.assign(recognition,{asset:editor.asset,threshold:editor.threshold});}
-  else {delete recognition.asset; Object.assign(recognition,{texts:editor.texts.split('\n').map(s=>s.trim()).filter(Boolean),mode:editor.mode,min_confidence:editor.min_confidence,similarity_threshold:editor.similarity_threshold});}
-  return {...clone(old),id:editor.id,name:editor.name,group:editor.group,role:editor.role,priority:editor.priority,recognition,actions:clone(editor.actions),conditions:clone(editor.conditions)};
+  const old = editor.original || {}, previous = old.recognition || {};
+  if(editor.kind==='combined' && editor.operator==='or' && editor.actions.some(a=>a.type==='click_match'&&a.target_box)) throw new Error('或 OR 可能只命中文字：请使用匹配中心；独立点击区请改为且 AND');
+  if(editor.roiEnabled && (!editor.recognitionBox || editor.recognitionBox.length!==4 || editor.recognitionBox[2]<=editor.recognitionBox[0] || editor.recognitionBox[3]<=editor.recognitionBox[1])) throw new Error('请先框选识别区，或关闭「仅在识别区内搜索」');
+  const region = editor.roiEnabled ? editor.recognitionBox : fullRegion;
+  const component = kind => {
+    const prior = previous.type==='combined' ? previous[kind] || {} : previous.type===kind ? previous : {};
+    // Legacy combined States can have distinct regions. Preserve them until reframed or toggled.
+    const keepLegacyRegion = previous.type==='combined' && JSON.stringify(previous.image.region)!==JSON.stringify(previous.text.region) && !editor.recognitionDirty && editor.roiEnabled===editState(old).roiEnabled && JSON.stringify(editor.recognitionBox)===JSON.stringify(editState(old).recognitionBox);
+    const result = {...clone(prior),type:kind,region:clone(keepLegacyRegion ? prior.region || fullRegion : region)};
+    if(kind==='image') {delete result.texts; Object.assign(result,{asset:editor.asset,threshold:editor.threshold});}
+    else {delete result.asset; Object.assign(result,{texts:editor.texts.split('\n').map(s=>s.trim()).filter(Boolean),mode:editor.mode,min_confidence:editor.min_confidence,similarity_threshold:editor.similarity_threshold});}
+    return result;
+  };
+  const recognition = editor.kind==='combined' ? {...(previous.type==='combined'?clone(previous):{}),type:'combined',operator:editor.operator,image:component('image'),text:component('text')} : component(editor.kind);
+  return {...clone(old),id:editor.id,name:editor.name,group:editor.group,role:editor.role,priority:editor.priority,recognition,workbench:{...clone(old.workbench || {}),roi_enabled:editor.roiEnabled,recognition_region:clone(editor.recognitionBox || [])},actions:clone(editor.actions),conditions:clone(editor.conditions)};
 }
 export function pixelPoint(x,y,bounds,size) {return [x-bounds.left,y-bounds.top].map((value,i)=>Math.max(0,Math.min(size[i],Math.round(value*size[i]/[bounds.width,bounds.height][i]))));}
 export function rectangle(a,b) {return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])];}

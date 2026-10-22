@@ -44,7 +44,16 @@ def main():
         {'serial': 'browser-device-2', 'status': 'device'},
         {'serial': 'browser-offline', 'status': 'offline'},
     ]
-    server = web.create_server(Store(args.data), args.port)
+    # Process-based tasks start a fresh interpreter, so they need a real fake
+    # executable rather than relying on the in-process FakeDevice monkeypatch.
+    adb = args.data / 'fake-adb'
+    adb.write_text('#!' + sys.executable + '\nimport sys\nfrom pathlib import Path\n'
+                   'root=Path(__file__).parent\n'
+                   'if "screencap" in sys.argv: sys.stdout.buffer.write((root/"browser-page.png").read_bytes())\n'
+                   'elif "shell" in sys.argv:\n'
+                   ' with (root/"fake-actions.log").open("a") as log: log.write(str(sys.argv)+"\\n")\n')
+    adb.chmod(0o755)
+    server = web.create_server(Store(args.data), args.port, adb=str(adb))
     print(f'Browser fixture ready on {server.server_port}', flush=True)
     try:
         server.serve_forever()

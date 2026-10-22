@@ -66,7 +66,7 @@ class Recognizer:
 
     def _match_component(self, frame, recognition):
         height, width = frame.shape[:2]
-        left, top, right, bottom = [int(v * size) for v, size in zip(recognition['region'], [width, height, width, height])]
+        left, top, right, bottom = [round(v * size) for v, size in zip(recognition['region'], [width, height, width, height])]
         result = {'found': False, 'bbox': None, 'score': 0, 'ambiguous': False}
         if right <= left or bottom <= top:
             raise ValueError('ROI 在当前截图上为空')

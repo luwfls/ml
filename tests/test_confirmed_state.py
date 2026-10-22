@@ -125,3 +125,17 @@ class ConfirmedStateTests(unittest.TestCase):
         self.assertEqual(changed['flow_ids'], ['b'])
         changed_again = self.store.save_task({**changed, 'flow_ids': ['a', 'b']})
         self.assertEqual(changed_again['flow_ids'], ['a', 'b'])
+
+class ExactSelectionRegionTests(unittest.TestCase):
+    def test_normalized_1080p_selection_keeps_full_cropped_template(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(directory)
+            frame = np.zeros((1920, 1080, 3), np.uint8)
+            template = np.random.default_rng(14).integers(0, 255, (15, 56, 3), dtype=np.uint8)
+            frame[200:215, 100:156] = template
+            cv2.imwrite(str(store.assets / 'precise.png'), template)
+            result = Recognizer(store).match(frame, state(recognition={
+                'type': 'image', 'asset': 'precise.png',
+                'region': [100/1080, 200/1920, 156/1080, 215/1920]}))
+            self.assertTrue(result['found'])
+            self.assertEqual(result['bbox'], [100, 200, 156, 215])
