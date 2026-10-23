@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const model = await import('../frontend/src/model.js').catch(() => ({}));
+test('blank State name focuses the required field and keeps the save drawer open without API or crop',async()=>{
+  const app=await component('App.vue'),originalFetch=globalThis.fetch;let requests=0,focused=0,crops=0;
+  globalThis.fetch=async()=>{requests++;throw new Error('should not request');};
+  try{
+    for(const name of ['','   ','\n']){
+      const context={editor:{...model.editState(),name},saveDrawer:true,locked:false,busy:false,$refs:{stateEditor:{focusName:()=>focused++}},cropAsset:()=>crops++};
+      context.guard=fn=>app.methods.guard.call(context,fn);
+      context.persistState=()=>app.methods.persistState.call(context);
+      await app.methods.saveCurrentState.call(context);
+      assert.match(context.error,/State 名称不能为空/);assert.equal(context.saveDrawer,true);assert.equal(context.busy,false);
+    }
+    assert.equal(requests,0);assert.equal(crops,0);assert.equal(focused,3);
+  }finally{globalThis.fetch=originalFetch;}
+});
 test('full capture association survives edit/save independently of the cropped template',()=>{
   const state={id:'linked',recognition:{type:'image',asset:'template.png'},workbench:{capture_id:'full-capture',custom:7}};
   const editor=model.editState(state),saved=model.saveState(editor);
@@ -23,7 +37,7 @@ test('changing captures immediately clears stale selection and saving snapshots 
   const app=await component('App.vue'),originalFetch=globalThis.fetch;let saved;
   globalThis.fetch=async(path,options)=>{saved=JSON.parse(options.body);return {ok:true,json:async()=>saved};};
   try{
-    const editor=model.editState({id:'a',recognition:{type:'text',texts:['OK']},workbench:{capture_id:'old'}});
+    const editor=model.editState({id:'a',name:'A',recognition:{type:'text',texts:['OK']},workbench:{capture_id:'old'}});
     const context={editor,selection:{recognition:[1,2,3,4]},locked:false,busy:false,canCrop:false,reloadCatalog:async()=>{},$message:{success:()=>{}}};
     app.methods.setCapture.call(context,{id:'new',url:'/captures/new.png'});
     assert.deepEqual(context.selection.recognition,[]);
@@ -160,7 +174,7 @@ test('save snapshots original draft before crop wait and does not save newly sel
   const app=await component('App.vue');let finishCrop;const saved=[];
   const originalFetch=globalThis.fetch;globalThis.fetch=async(path,options)=>{const body=JSON.parse(options.body);saved.push(body);return {ok:true,json:async()=>body};};
   try {
-    const a=model.editState({id:'a',recognition:{type:'image',asset:''},actions:[]}),b=model.editState({id:'b',recognition:{type:'image',asset:'b.png'},actions:[]});
+    const a=model.editState({id:'a',name:'A',recognition:{type:'image',asset:''},actions:[]}),b=model.editState({id:'b',recognition:{type:'image',asset:'b.png'},actions:[]});
     const context={editor:a,locked:false,canCrop:true,busy:false,selection:{recognition:[1,2,20,30]},captureId:'capture-a',cropAsset:editor=>new Promise(r=>{finishCrop=()=>{(editor||context.editor).asset='fresh-a.png';r();};}),reloadCatalog:async()=>{},$message:{success:()=>{}}};
     const pending=app.methods.persistState.call(context);context.editor=b;finishCrop();await pending;
     assert.equal(saved[0].id,'a');assert.equal(saved[0].recognition.asset,'fresh-a.png');assert.equal(context.editor,b);assert.equal(b.asset,'b.png');
@@ -170,7 +184,7 @@ test('double State save rejects while first request is pending and clears busy a
   const app=await component('App.vue');let resolve;let requests=0;
   const originalFetch=globalThis.fetch;globalThis.fetch=()=>{requests++;return new Promise(r=>{resolve=r;});};
   try {
-    const state={id:'a',recognition:{type:'image',asset:'a.png'},actions:[]};
+    const state={id:'a',name:'A',recognition:{type:'image',asset:'a.png'},actions:[]};
     const context={editor:model.editState(state),locked:false,busy:false,canCrop:false,selection:{recognition:[]},captureId:'',reloadCatalog:async()=>{},$message:{success:()=>{}}};
     const first=app.methods.persistState.call(context);
     await assert.rejects(()=>app.methods.persistState.call(context));
@@ -235,7 +249,7 @@ test('saving a reframed State replaces its existing image template',async()=>{
   const app=await component('App.vue'),originalFetch=globalThis.fetch;let cropped=false,saved;
   globalThis.fetch=async(path,options)=>{saved=JSON.parse(options.body);return {ok:true,json:async()=>saved};};
   try {
-    const editor=model.editState({id:'a',recognition:{type:'image',asset:'old.png'}});editor.recognitionDirty=true;editor.recognitionBox=[.1,.2,.5,.6];
+    const editor=model.editState({id:'a',name:'A',recognition:{type:'image',asset:'old.png'}});editor.recognitionDirty=true;editor.recognitionBox=[.1,.2,.5,.6];
     const context={editor,locked:false,busy:false,canCrop:true,selection:{recognition:[10,20,50,60],click:[]},captureId:'c',cropAsset:async draft=>{cropped=true;draft.asset='new.png';},reloadCatalog:async()=>{},$message:{success:()=>{}}};
     await app.methods.persistState.call(context);assert.equal(cropped,true);assert.equal(saved.recognition.asset,'new.png');
   } finally {globalThis.fetch=originalFetch;}

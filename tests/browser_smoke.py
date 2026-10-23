@@ -49,6 +49,8 @@ def main():
                     try:
                         page = browser.new_page(viewport={'width': 1600, 'height': 1100})
                         errors = []
+                        state_posts = []
+                        page.on('request', lambda request: state_posts.append(request.url) if request.method == 'POST' and request.url.endswith('/api/states') else None)
                         page.on('pageerror', lambda error: errors.append(str(error)))
                         def api(path):
                             response = page.request.get(base + path)
@@ -95,7 +97,23 @@ def main():
                         assert re.fullmatch('[a-f0-9]{32}', state_id)
                         expect(field(drawer, 'ID').locator('input')).to_have_attribute('readonly', 'readonly')
                         page.keyboard.press('F4')
+                        for invalid_name in ['', '   ']:
+                            field(drawer, '名称').locator('input').fill(invalid_name)
+                            page.keyboard.press('F4')
+                            expect(drawer.locator('.el-alert--error')).to_contain_text('State 名称不能为空')
+                            expect(field(drawer, '名称').locator('.el-form-item__error')).to_have_text('请输入 State 名称')
+                            expect(field(drawer, '名称').locator('input')).to_be_focused()
+                            assert state_posts == []
+                        page.screenshot(path=str(args.artifacts / 'state-name-validation.png'), animations='disabled')
                         field(drawer, '名称').locator('input').fill('确认收货')
+                        expect(drawer.locator('.el-alert--error')).to_have_count(0)
+                        def reject_save(route):
+                            route.fulfill(status=400, content_type='application/json', body=json.dumps({'error': '保存失败测试提示'}))
+                        page.route('**/api/states', reject_save)
+                        page.keyboard.press('F4')
+                        expect(drawer.locator('.el-alert--error')).to_contain_text('保存失败测试提示')
+                        expect(page.locator('.el-drawer:visible')).to_have_count(1)
+                        page.unroute('**/api/states', reject_save)
                         field(drawer, '角色').locator('.el-select').click()
                         page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('success|成功断言')).click()
                         field(drawer, '名称').locator('input').focus()
