@@ -4,7 +4,7 @@ export function editState(state = {}) {
   const original = clone(state), r = state.recognition || {}, image = r.type==='combined' ? r.image : r.type==='image' ? r : {}, text = r.type==='combined' ? r.text : r.type==='text' ? r : {};
   const region = r.type==='combined' ? image.region || fullRegion : r.region || fullRegion;
   const ui = state.workbench || {};
-  return {...clone(state), original, id:state.id || '', name:state.name || '', group:state.group || '', role:state.role || 'normal', priority:state.priority || 0,
+  return {...clone(state), original, id:state.id || crypto.randomUUID().replaceAll('-',''), name:state.name || '', group:state.group || '', role:state.role || 'normal', priority:state.priority || 0,
     kind:r.type || 'image', operator:r.operator || 'and', asset:image.asset || '', texts:(text.texts || []).join('\n'), mode:text.mode || 'exact', threshold:image.threshold ?? .85,
     min_confidence:text.min_confidence ?? .8, similarity_threshold:text.similarity_threshold ?? .85, region:clone(region),
     roiEnabled:ui.roi_enabled ?? (!state.recognition || JSON.stringify(region)!==JSON.stringify(fullRegion)),

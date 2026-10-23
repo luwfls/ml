@@ -1,19 +1,19 @@
 <template>
-  <section v-if="visible" class="state-editor"><div class="editor-heading"><h3>{{ editor.original.id ? '编辑 State' : '新建 State' }} · 模板识别条件</h3><el-button size="mini" @click="$emit('close')">取消编辑</el-button></div>
+  <component :is="asDrawer?'el-drawer':'section'" v-if="visible" class="state-editor" :visible="visible" :with-header="false" :wrapper-closable="false" size="480px" @close="$emit('close')"><div class="editor-heading"><h3>{{ editor.original.id ? '编辑 State' : '新建 State' }} · {{ asDrawer?'确认保存':'模板识别条件' }}</h3><el-button size="mini" @click="$emit('close')">取消编辑</el-button></div>
     <div class="drawer-body">
       <el-form label-width="96px" size="small" :disabled="locked">
-        <el-form-item label="ID"><el-input v-model="editor.id" :disabled="!!editor.original.id" placeholder="英文字母、数字、_、-" /></el-form-item>
+        <el-form-item label="ID"><el-input :value="editor.id" readonly /><p class="hint">系统自动生成，无需填写；用于流程和条件引用。</p></el-form-item>
         <el-form-item label="名称"><el-input v-model="editor.name" /></el-form-item>
         <el-form-item label="分组"><el-select v-model="editor.group" clearable><el-option v-for="g in groups" :key="g.name" :label="g.name" :value="g.name" /></el-select></el-form-item>
         <el-form-item label="角色"><el-select v-model="editor.role"><el-option v-for="r in roles" :key="r" :label="roleLabels[r]" :value="r" /></el-select></el-form-item>
         <el-form-item label="优先级"><el-input-number v-model="editor.priority" :min="-10000" :max="10000" /></el-form-item>
         <el-form-item label="识别方式"><el-checkbox :value="editor.kind!=='text'" :disabled="editor.kind==='image'" @change="toggleRecognition('image',$event)">图片匹配</el-checkbox><el-checkbox :value="editor.kind!=='image'" :disabled="editor.kind==='text'" @change="toggleRecognition('text',$event)">文字匹配</el-checkbox></el-form-item>
         <template v-if="editor.kind!=='text'">
-          <el-form-item label="图片模板"><img v-if="editor.asset" class="template-preview" :src="'/assets/'+editor.asset" alt="识别区模板" /></el-form-item><el-form-item label="图片资源"><el-input v-model="editor.asset" placeholder="框选后裁剪或填写现有资源名" /><el-button :disabled="!canCrop" @click="$emit('crop')">裁剪识别区</el-button></el-form-item>
+          <el-form-item label="图片模板"><img v-if="editor.asset" class="template-preview" :src="'/assets/'+editor.asset" alt="识别区模板" /></el-form-item><el-form-item label="图片资源"><el-input v-model="editor.asset" placeholder="自动裁剪生成，也可填写已有模板文件名" /><p class="hint">图片匹配使用的小图模板文件名，不是整张截图；填写已有文件名可复用模板。</p><el-button :disabled="!canCrop" @click="$emit('crop')">裁剪识别区</el-button><p class="hint">将蓝色识别区截成模板并更新上方预览。保存时会自动裁剪新框选区域，无需先点此按钮。</p></el-form-item>
           <el-form-item label="匹配阈值"><el-input-number v-model="editor.threshold" :min=".01" :max="1" :step=".01" /></el-form-item>
         </template>
         <template v-if="editor.kind!=='image'">
-          <el-form-item label="候选文案"><el-input v-model="editor.texts" type="textarea" :rows="3" placeholder="每行一个候选文案" /></el-form-item>
+          <el-form-item label="候选文案"><div v-for="(text,i) in textCandidates" :key="i" class="candidate-row"><el-input :value="text" :placeholder="'候选文案 '+(i+1)" @input="updateCandidate(i,$event)" /><el-button :disabled="textCandidates.length===1" @click="removeCandidate(i)">移除</el-button></div><el-button @click="editor.texts+='\n'">添加候选文案</el-button><p class="hint">可添加多个文案，任意一个匹配即算文字命中。</p></el-form-item>
           <el-form-item label="匹配模式"><el-select v-model="editor.mode"><el-option label="完全匹配" value="exact" /><el-option label="包含文字" value="contains" /><el-option label="模糊匹配" value="fuzzy" /></el-select></el-form-item>
           <el-form-item label="最低置信度"><el-input-number v-model="editor.min_confidence" :min="0" :max="1" :step=".01" /></el-form-item>
           <el-form-item label="模糊相似度"><el-input-number v-model="editor.similarity_threshold" :min=".01" :max="1" :step=".01" /></el-form-item>
@@ -31,11 +31,11 @@
         <el-form-item label="后置等待"><div v-for="(a,i) in editor.actions" :key="i" v-if="a.type==='wait'" class="button-row"><el-input-number v-model="a.ms" :min="0" :max="10000" /><span>ms</span><el-button @click="editor.actions.splice(i,1)">移除</el-button></div><el-button @click="editor.actions.push({type:'wait',ms:500})">添加等待</el-button></el-form-item>
         <small>成功 / 失败 State 为断言，保存前请保持无动作。每个 State 最多一个输入动作。</small>
       </el-form>
-      <div class="button-row"><el-button type="primary" :disabled="locked" @click="$emit('save')">保存 F4</el-button><el-button :disabled="!canPreview" @click="$emit('preview')">识别预览</el-button><el-button type="warning" :disabled="locked||!editor.original.id||!serial" @click="$emit('execute')">执行动作 F5</el-button></div>
+      <div class="button-row"><el-button type="primary" :disabled="locked" @click="$emit('save')">{{ asDrawer?'确认保存 F4':'保存 State' }}</el-button><el-button :disabled="!canPreview" @click="$emit('preview')">识别预览</el-button><el-button type="warning" :disabled="locked||!editor.original.id||!serial" @click="$emit('execute')">执行动作 F5</el-button></div>
       <div v-if="editor.original.id" class="button-row"><el-button :disabled="locked" @click="$emit('copy',editor.original)">复制 State</el-button><el-button type="danger" :disabled="locked" @click="$emit('delete',editor.original)">删除 State</el-button></div>
     </div>
-  </section>
+  </component>
 </template>
 <script>
-export default {props:{visible:Boolean,editor:Object,states:Array,groups:Array,locked:Boolean,serial:String,canCrop:Boolean,canTarget:Boolean,canPreview:Boolean},data:()=>({roles:['normal','success','failure','fallback'],roleLabels:{normal:'普通',success:'成功断言',failure:'失败断言',fallback:'兜底（须命中）'}}),computed:{otherStates(){return this.states.filter(s=>s.id!==this.editor.id);},inputAction(){return this.editor.actions.find(a=>a.type!=='wait');},inputType(){return this.inputAction?.type||'none';}},methods:{toggleRecognition(kind,enabled){this.editor.kind=enabled?'combined':kind==='image'?'text':'image';},changeInput(type){const waits=this.editor.actions.filter(a=>a.type==='wait');const action=type==='none'?[]:[type===this.inputType?this.inputAction:{type,...(type==='key'?{key:'back'}:type==='swipe'?{points:[.5,.8,.5,.2],duration_ms:300}:{})}];this.editor.actions=[...action,...waits];}}};
+export default {props:{visible:Boolean,asDrawer:Boolean,editor:Object,states:Array,groups:Array,locked:Boolean,serial:String,canCrop:Boolean,canTarget:Boolean,canPreview:Boolean},data:()=>({roles:['normal','success','failure','fallback'],roleLabels:{normal:'普通',success:'成功断言',failure:'失败断言',fallback:'兜底（须命中）'}}),computed:{textCandidates(){return this.editor.texts.split('\n');},otherStates(){return this.states.filter(s=>s.id!==this.editor.id);},inputAction(){return this.editor.actions.find(a=>a.type!=='wait');},inputType(){return this.inputAction?.type||'none';}},methods:{updateCandidate(index,value){const texts=this.editor.texts.split('\n');texts[index]=value;this.editor.texts=texts.join('\n');},removeCandidate(index){const texts=this.editor.texts.split('\n');texts.splice(index,1);this.editor.texts=texts.join('\n');},toggleRecognition(kind,enabled){this.editor.kind=enabled?'combined':kind==='image'?'text':'image';},changeInput(type){const waits=this.editor.actions.filter(a=>a.type==='wait');const action=type==='none'?[]:[type===this.inputType?this.inputAction:{type,...(type==='key'?{key:'back'}:type==='swipe'?{points:[.5,.8,.5,.2],duration_ms:300}:{})}];this.editor.actions=[...action,...waits];}}};
 </script>

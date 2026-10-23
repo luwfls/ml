@@ -81,18 +81,27 @@ def main():
                         page.mouse.down()
                         page.mouse.move(bounds['x'] + 351, bounds['y'] + 211, steps=10)
                         page.mouse.up()
-                        page.get_by_role('button', name='新建 State', exact=True).click()
+                        page.keyboard.press('F4')
+                        expect(page.locator('.el-drawer:visible')).to_have_count(1)
+                        assert api('/api/states') == []
                         drawer = page.locator('.state-editor:visible')
                         expect(drawer.get_by_role('checkbox', name='仅在识别区内搜索', exact=True)).to_be_checked()
                         expect(page.get_by_role('radio', name='搜索 ROI', exact=True)).to_have_count(0)
+                        drawer.get_by_role('button', name='取消编辑', exact=True).click()
+                        expect(page.locator('.el-drawer:visible')).to_have_count(0)
                         left, right = page.locator('.capture-pane').bounding_box(), drawer.bounding_box()
                         assert left['x'] + left['width'] <= right['x'], (left, right)
-                        field(drawer, 'ID').locator('input').fill('confirm')
+                        state_id = field(drawer, 'ID').locator('input').input_value()
+                        assert re.fullmatch('[a-f0-9]{32}', state_id)
+                        expect(field(drawer, 'ID').locator('input')).to_have_attribute('readonly', 'readonly')
+                        page.keyboard.press('F4')
                         field(drawer, '名称').locator('input').fill('确认收货')
                         field(drawer, '角色').locator('.el-select').click()
                         page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('success|成功断言')).click()
-                        drawer.get_by_role('button', name='保存 F4', exact=True).click()
-                        expect(page.locator('.state-card').filter(has_text='confirm')).to_be_visible()
+                        field(drawer, '名称').locator('input').focus()
+                        page.keyboard.press('F4')
+                        expect(page.locator('.el-drawer:visible')).to_have_count(0)
+                        expect(page.locator('.state-card').filter(has_text=state_id)).to_be_visible()
                         initial = api('/api/states')[0]
                         assert initial['group'] == '收货验证'
                         assert initial['workbench']['roi_enabled'] is True
@@ -111,18 +120,31 @@ def main():
                         # Live Vue form persists combined recognition and ROI, with no prototype storage.
                         page.locator('.state-card').click()
                         drawer.get_by_text('文字匹配', exact=True).click()
-                        field(drawer, '候选文案').locator('textarea').fill('CONFIRM\n完成')
+                        candidates = field(drawer, '候选文案')
+                        candidates.locator('input').first.fill('CONFIRM')
+                        candidates.get_by_role('button', name='添加候选文案', exact=True).click()
+                        candidates.locator('input').nth(1).fill('完成')
+                        candidates.get_by_role('button', name='添加候选文案', exact=True).click()
+                        candidates.locator('input').nth(2).fill('移除项')
+                        candidates.get_by_role('button', name='移除', exact=True).nth(2).click()
                         drawer.get_by_text('或 OR', exact=True).click()
+                        page.keyboard.press('F4')
+                        expect(page.locator('.el-drawer:visible')).to_have_count(1)
+                        page.set_viewport_size({'width': 1600, 'height': 1600})
+                        page.evaluate('window.scrollTo(0,0)')
+                        page.screenshot(path=str(args.artifacts / 'state-save-drawer.png'), full_page=False, animations='disabled')
+                        page.set_viewport_size({'width': 1600, 'height': 1100})
+                        drawer.get_by_role('button', name='取消编辑', exact=True).click()
                         with page.expect_response(lambda r: r.url.endswith('/api/states') and r.request.method == 'POST') as save_response:
-                            drawer.get_by_role('button', name='保存 F4', exact=True).click()
+                            drawer.get_by_role('button', name='保存 State', exact=True).click()
                         assert save_response.value.ok, save_response.value.text()
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         expect(page.get_by_text('State 已保存', exact=True).first).to_be_visible()
                         combined = api('/api/states')[0]['recognition']
                         assert combined['type'] == 'combined' and combined['operator'] == 'or'
                         assert combined['text']['texts'] == ['CONFIRM', '完成']
                         assert combined['image']['region'] == combined['text']['region']
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         expect(page.locator('.el-message')).to_have_count(0)
                         page.screenshot(path=str(args.artifacts / 'state-workbench-A-combined.png'), full_page=True)
                         page.reload()
@@ -130,31 +152,32 @@ def main():
                         page.locator('.state-card').click()
                         expect(drawer.get_by_role('checkbox', name='文字匹配', exact=True)).to_be_checked()
                         expect(drawer.locator('input[type=radio][value=or]')).to_be_checked()
+                        assert field(drawer, '候选文案').locator('input').evaluate_all('(nodes)=>nodes.map(node=>node.value)') == ['CONFIRM', '完成']
                         expect(drawer.get_by_role('button', name='识别预览', exact=True)).to_be_disabled()
                         page.locator('input[type=file]').set_input_files(data / 'browser-page.png')
                         expect(canvas).to_be_visible()
                         # Text-only configuration is also supported, without losing candidate text.
                         drawer.get_by_text('图片匹配', exact=True).click()
                         with page.expect_response(lambda r: r.url.endswith('/api/states') and r.request.method == 'POST') as save_response:
-                            drawer.get_by_role('button', name='保存 F4', exact=True).click()
+                            drawer.get_by_role('button', name='保存 State', exact=True).click()
                         assert save_response.value.ok, save_response.value.text()
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         assert api('/api/states')[0]['recognition']['type'] == 'text'
                         drawer.get_by_text('图片匹配', exact=True).click()
                         drawer.get_by_text('且 AND', exact=True).click()
                         with page.expect_response(lambda r: r.url.endswith('/api/states') and r.request.method == 'POST') as save_response:
-                            drawer.get_by_role('button', name='保存 F4', exact=True).click()
+                            drawer.get_by_role('button', name='保存 State', exact=True).click()
                         assert save_response.value.ok, save_response.value.text()
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         assert api('/api/states')[0]['recognition']['operator'] == 'and'
                         page.locator('input[type=file]').set_input_files(data / 'browser-page.png')
                         expect(canvas).to_be_visible()
                         expect(page.locator('.capture-workbench')).to_contain_text('120, 100, 351, 211')
                         drawer.get_by_text('仅在识别区内搜索', exact=True).click()
                         with page.expect_response(lambda r: r.url.endswith('/api/states') and r.request.method == 'POST') as save_response:
-                            drawer.get_by_role('button', name='保存 F4', exact=True).click()
+                            drawer.get_by_role('button', name='保存 State', exact=True).click()
                         assert save_response.value.ok, save_response.value.text()
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         combined = api('/api/states')[0]['recognition']
                         assert combined['image']['region'] == combined['text']['region'] == [0, 0, 1, 1]
                         page.locator('.state-card').click()
@@ -162,9 +185,9 @@ def main():
                         drawer.get_by_text('仅在识别区内搜索', exact=True).click()
                         drawer.get_by_text('文字匹配', exact=True).click()
                         with page.expect_response(lambda r: r.url.endswith('/api/states') and r.request.method == 'POST') as save_response:
-                            drawer.get_by_role('button', name='保存 F4', exact=True).click()
+                            drawer.get_by_role('button', name='保存 State', exact=True).click()
                         assert save_response.value.ok, save_response.value.text()
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         assert api('/api/states')[0]['recognition']['type'] == 'image'
                         # Saving a new selection replaces the saved template automatically.
                         previous_asset = api('/api/states')[0]['recognition']['asset']
@@ -175,13 +198,13 @@ def main():
                         page.mouse.move(bounds['x'] + 360, bounds['y'] + 220, steps=10)
                         page.mouse.up()
                         with page.expect_response(lambda r: r.url.endswith('/api/states') and r.request.method == 'POST') as save_response:
-                            drawer.get_by_role('button', name='保存 F4', exact=True).click()
+                            drawer.get_by_role('button', name='保存 State', exact=True).click()
                         assert save_response.value.ok, save_response.value.text()
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         reframed = api('/api/states')[0]
                         assert reframed['recognition']['asset'] != previous_asset
                         assert reframed['recognition']['region'] == [110/640, 90/480, 360/640, 220/480]
-                        expect(drawer.get_by_role('button', name='保存 F4', exact=True)).to_be_enabled()
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
                         expect(page.locator('.el-message')).to_have_count(0)
                         page.screenshot(path=str(args.artifacts / 'state-workbench-A.png'), full_page=True)
                         page.set_viewport_size({'width': 900, 'height': 1100})
@@ -228,7 +251,7 @@ def main():
                         page.mouse.up()
                         drawer.get_by_role('button', name='裁剪并采用独立点击区', exact=True).click()
                         expect(field(drawer, '点击区域')).not_to_contain_text('匹配框中心')
-                        drawer.get_by_role('button', name='保存 F4', exact=True).click()
+                        drawer.get_by_role('button', name='保存 State', exact=True).click()
                         for _ in range(100):
                             copied = next(s for s in api('/api/states') if s['id'] == 'confirm-click')
                             if copied['actions']: break

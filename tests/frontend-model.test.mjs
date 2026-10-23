@@ -1,6 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const model = await import('../frontend/src/model.js').catch(() => ({}));
+test('new State gets a unique automatic ID and reopening keeps the saved ID',()=>{
+  const a=model.editState(),b=model.editState();
+  assert.match(a.id,/^[a-f0-9]{32}$/);assert.notEqual(a.id,b.id);
+  assert.equal(model.editState({id:a.id}).id,a.id);
+});
+test('candidate rows add, update and remove without losing the other alternatives',async()=>{
+  const componentDefinition=await component('components/StateEditor.vue');
+  const editor=model.editState({id:'text',recognition:{type:'text',texts:['成功','完成']}});
+  const context={editor};
+  componentDefinition.methods.updateCandidate.call(context,1,'已完成');
+  editor.texts+='\n';componentDefinition.methods.updateCandidate.call(context,2,'确认');
+  componentDefinition.methods.removeCandidate.call(context,0);
+  assert.deepEqual(model.saveState(editor).recognition.texts,['已完成','确认']);
+});
+test('F4 opens the save drawer without persisting, then saves from a focused form input',async()=>{
+  const app=await component('App.vue');let opened=0,saved=0;
+  const context={drawer:false,saveDrawer:false,locked:false,openState(){opened++;this.drawer=true;},saveCurrentState(){saved++;}};
+  context.openSaveDrawer=()=>app.methods.openSaveDrawer.call(context);
+  context.saveHotkey=()=>app.methods.saveHotkey.call(context);
+  const previousDocument=globalThis.document;globalThis.document={querySelectorAll:()=>[]};
+  try{
+    const event={key:'F4',target:{tagName:'INPUT'},preventDefault(){}};
+    app.methods.hotkey.call(context,event);
+    assert.equal(opened,1);assert.equal(context.saveDrawer,true);assert.equal(saved,0);
+    app.methods.hotkey.call(context,event);assert.equal(saved,1);
+    app.methods.hotkey.call(context,{...event,repeat:true});assert.equal(saved,1);
+    app.methods.closeStateEditor.call(context);assert.equal(context.saveDrawer,false);assert.equal(context.drawer,true);
+    context.locked=true;context.openSaveDrawer();assert.equal(context.saveDrawer,false);
+  }finally{globalThis.document=previousDocument;}
+});
 test('editing a saved state preserves unknown fields and wait-only actions', () => {
   assert.equal(typeof model.editState, 'function');
   const state = {id:'a', name:'旧', extra:{retain:true}, recognition:{type:'text', texts:['好'], region:[.1,.2,.8,.9], custom:42}, actions:[{type:'wait',ms:123,other:true}], conditions:{required_states:['b'], excluded_states:['c'], custom:1}};
