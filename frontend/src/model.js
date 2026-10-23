@@ -8,7 +8,7 @@ export function editState(state = {}) {
     kind:r.type || 'image', operator:r.operator || 'and', asset:image.asset || '', texts:(text.texts || []).join('\n'), mode:text.mode || 'exact', threshold:image.threshold ?? .85,
     min_confidence:text.min_confidence ?? .8, similarity_threshold:text.similarity_threshold ?? .85, region:clone(region),
     roiEnabled:ui.roi_enabled ?? (!state.recognition || JSON.stringify(region)!==JSON.stringify(fullRegion)),
-    recognitionBox:clone(ui.recognition_region || (JSON.stringify(region)!==JSON.stringify(fullRegion) ? region : [])), recognitionDirty:false,
+    recognitionBox:clone(ui.recognition_region || (JSON.stringify(region)!==JSON.stringify(fullRegion) ? region : [])), recognitionDirty:false, captureId:ui.capture_id || '',
     actions:clone(state.actions || []), conditions:{...clone(state.conditions || {}),required_states:clone(state.conditions?.required_states || []),excluded_states:clone(state.conditions?.excluded_states || [])}};
 }
 export function saveState(editor) {
@@ -26,7 +26,7 @@ export function saveState(editor) {
     return result;
   };
   const recognition = editor.kind==='combined' ? {...(previous.type==='combined'?clone(previous):{}),type:'combined',operator:editor.operator,image:component('image'),text:component('text')} : component(editor.kind);
-  return {...clone(old),id:editor.id,name:editor.name,group:editor.group,role:editor.role,priority:editor.priority,recognition,workbench:{...clone(old.workbench || {}),roi_enabled:editor.roiEnabled,recognition_region:clone(editor.recognitionBox || [])},actions:clone(editor.actions),conditions:clone(editor.conditions)};
+  return {...clone(old),id:editor.id,name:editor.name,group:editor.group,role:editor.role,priority:editor.priority,recognition,workbench:{...clone(old.workbench || {}),capture_id:editor.captureId || '',roi_enabled:editor.roiEnabled,recognition_region:clone(editor.recognitionBox || [])},actions:clone(editor.actions),conditions:clone(editor.conditions)};
 }
 export function pixelPoint(x,y,bounds,size) {return [x-bounds.left,y-bounds.top].map((value,i)=>Math.max(0,Math.min(size[i],Math.round(value*size[i]/[bounds.width,bounds.height][i]))));}
 export function rectangle(a,b) {return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])];}

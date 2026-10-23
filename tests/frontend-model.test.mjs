@@ -1,6 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const model = await import('../frontend/src/model.js').catch(() => ({}));
+test('full capture association survives edit/save independently of the cropped template',()=>{
+  const state={id:'linked',recognition:{type:'image',asset:'template.png'},workbench:{capture_id:'full-capture',custom:7}};
+  const editor=model.editState(state),saved=model.saveState(editor);
+  assert.equal(editor.captureId,'full-capture');assert.equal(saved.workbench.capture_id,'full-capture');
+  assert.equal(saved.recognition.asset,'template.png');assert.equal(saved.workbench.custom,7);
+  assert.equal(model.editState({id:'legacy'}).captureId,'');
+});
+test('opening a State restores its own full capture and clears unrelated capture for legacy States',async()=>{
+  const app=await component('App.vue');
+  const context={locked:false,selection:{recognition:[],click:[],size:[]},captureId:'unrelated',captureUrl:'/captures/unrelated.png'};
+  context.setCapture=c=>app.methods.setCapture.call(context,c);
+  const state={id:'linked',recognition:{type:'image',asset:'a.png'},workbench:{capture_id:'original'}};
+  app.methods.openState.call(context,state);
+  assert.equal(context.captureId,'original');assert.equal(context.captureUrl,'/captures/original.png');
+  app.methods.openState.call(context,{id:'legacy',recognition:{type:'image',asset:'b.png'}});
+  assert.equal(context.captureUrl,'');assert.equal(context.captureId,'');
+  assert.deepEqual(context.selection.recognition,[]);
+});
+test('changing captures immediately clears stale selection and saving snapshots the selected capture',async()=>{
+  const app=await component('App.vue'),originalFetch=globalThis.fetch;let saved;
+  globalThis.fetch=async(path,options)=>{saved=JSON.parse(options.body);return {ok:true,json:async()=>saved};};
+  try{
+    const editor=model.editState({id:'a',recognition:{type:'text',texts:['OK']},workbench:{capture_id:'old'}});
+    const context={editor,selection:{recognition:[1,2,3,4]},locked:false,busy:false,canCrop:false,reloadCatalog:async()=>{},$message:{success:()=>{}}};
+    app.methods.setCapture.call(context,{id:'new',url:'/captures/new.png'});
+    assert.deepEqual(context.selection.recognition,[]);
+    await app.methods.persistState.call(context);assert.equal(saved.workbench.capture_id,'new');
+  }finally{globalThis.fetch=originalFetch;}
+});
 test('new State gets a unique automatic ID and reopening keeps the saved ID',()=>{
   const a=model.editState(),b=model.editState();
   assert.match(a.id,/^[a-f0-9]{32}$/);assert.notEqual(a.id,b.id);

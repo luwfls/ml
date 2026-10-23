@@ -1,7 +1,16 @@
 .venv/
 __pycache__/
 node_modules/
+# Local runtime data: full captures, image templates, State/flow/task configs and runs.
 data/
+/captures/
+/assets/
+/states/
+/flows/
+/tasks/
+/runs/
+/batches/
+/logs/
 dist/
 *.pyc
 platform-tools/

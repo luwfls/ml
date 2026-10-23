@@ -201,6 +201,7 @@ class BackendApiTests(unittest.TestCase):
         imported = self.request('/api/import', {'png': base64.b64encode((self.root / 'good.png').read_bytes()).decode()})
         saved = self.request('/api/states/save', {'state': {'name': '新状态', 'recognition': {'type': 'image'}},
                                                    'capture_id': imported['id'], 'box': [20, 10, 40, 25]})
+        self.assertEqual(saved['workbench']['capture_id'], imported['id'])
         self.assertRegex(saved['id'], r'^[a-f0-9]{32}$')
         asset = saved['recognition']['asset']
         self.assertEqual(cv2.imread(str(self.store.assets / asset)).shape[:2], (15, 20))

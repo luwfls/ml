@@ -14,6 +14,18 @@ class CatalogTests(unittest.TestCase):
         self.store = Store(self.tmp.name)
     def tearDown(self):
         self.tmp.cleanup()
+    def test_full_capture_association_survives_restart_and_copy(self):
+        self.store.assets.joinpath('a.png').write_bytes(b'template')
+        self.store.captures.joinpath('source.png').write_bytes(b'full screenshot')
+        original = self.store.save(state('a', workbench={'capture_id': 'source'}))
+        restored = Store(self.tmp.name).load_all()[0]
+        self.assertEqual(restored['workbench']['capture_id'], 'source')
+        copied = self.store.copy_state(original['id'])
+        self.assertEqual(copied['workbench']['capture_id'], 'source')
+        self.assertNotEqual(copied['recognition']['asset'], 'a.png')
+        for invalid in ['../outside', '/absolute', 42, None]:
+            with self.assertRaises(ValueError):
+                self.store.save(state('bad', workbench={'capture_id': invalid}))
     def test_group_copy_remaps_conditions_and_copies_assets(self):
         self.store.assets.joinpath('a.png').write_bytes(b'original')
         self.store.assets.joinpath('b.png').write_bytes(b'other')

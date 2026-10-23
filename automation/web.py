@@ -202,6 +202,7 @@ def create_server(store, port=8765, adb='adb', ocr=None):
                 raise ValueError('裁剪模板需要图片识别配置')
             asset_path = store.assets / (uuid4().hex + '.png')
             component['asset'] = asset_path.name
+            state.setdefault('workbench', {})['capture_id'] = body['capture_id']
             state = validate_state(state)
         try:
             if asset_path is not None:

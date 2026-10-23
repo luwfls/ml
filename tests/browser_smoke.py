@@ -103,6 +103,9 @@ def main():
                         expect(page.locator('.el-drawer:visible')).to_have_count(0)
                         expect(page.locator('.state-card').filter(has_text=state_id)).to_be_visible()
                         initial = api('/api/states')[0]
+                        assert initial['workbench']['capture_id']
+                        original_image = page.request.get(base + '/captures/' + initial['workbench']['capture_id'] + '.png')
+                        assert original_image.ok and original_image.body() == (data / 'browser-page.png').read_bytes()
                         assert initial['group'] == '收货验证'
                         assert initial['workbench']['roi_enabled'] is True
                         assert initial['recognition']['region'] == initial['workbench']['recognition_region']
@@ -150,6 +153,10 @@ def main():
                         page.reload()
                         expect(page.get_by_text('API 在线', exact=True)).to_be_visible()
                         page.locator('.state-card').click()
+                        expect(canvas).to_be_visible()
+                        expect(page.locator('.capture-workbench')).to_contain_text('截图 640 × 480 px')
+                        expect(page.locator('.capture-workbench')).to_contain_text('120, 100, 351, 211')
+                        page.screenshot(path=str(args.artifacts / 'state-original-restored.png'), full_page=True)
                         expect(drawer.get_by_role('checkbox', name='文字匹配', exact=True)).to_be_checked()
                         expect(drawer.locator('input[type=radio][value=or]')).to_be_checked()
                         assert field(drawer, '候选文案').locator('input').evaluate_all('(nodes)=>nodes.map(node=>node.value)') == ['CONFIRM', '完成']
@@ -365,6 +372,24 @@ def main():
                         page.get_by_role('button', name='任务', exact=True).click()
                         expect(page.locator('.task-card')).to_have_count(1)
                         assert len([r for r in api('/api/runs') if r.get('task_id') == task['id']]) == 2
+                        assert not errors, errors
+                        # Legacy or missing capture links cannot leave an unrelated screenshot visible.
+                        for capture_link in [None, 'missing-original']:
+                            payload = {'id': 'capture-edge', 'name': '原图异常验证', 'recognition': {'type': 'text', 'texts': ['OK']}}
+                            if capture_link:
+                                payload['workbench'] = {'capture_id': capture_link}
+                            assert page.request.post(base + '/api/states', data=payload).ok
+                            page.reload()
+                            expect(page.get_by_text('API 在线', exact=True)).to_be_visible()
+                            page.locator('.state-card').filter(has_text=state_id).click()
+                            expect(canvas).to_be_visible()
+                            page.locator('.state-card').filter(has_text='capture-edge').click()
+                            expect(canvas).not_to_be_visible()
+                            if capture_link:
+                                expect(page.locator('.el-alert--error')).to_contain_text('完整截图不存在或加载失败')
+                            else:
+                                expect(page.get_by_text('此 State 尚未关联完整截图，请重新导入原图并保存一次。', exact=True)).to_be_visible()
+                            assert page.request.post(base + '/api/states/delete', data={'id': 'capture-edge'}).ok
                         assert not errors, errors
                         print('Chromium smoke passed: A layout, combined recognition/ROI persistence and responsive layout; State/flow editing, task save and two-device launch, independent pause/cancel, reload and evidence; no page errors')
                     finally:

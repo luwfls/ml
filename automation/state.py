@@ -85,6 +85,12 @@ def validate_state(data):
     data.setdefault('group', '')
     if not isinstance(data['group'], str) or len(data['group']) > 200:
         raise ValueError('分组名必须为字符串，最多 200 字')
+    if 'workbench' in data:
+        if not isinstance(data['workbench'], dict):
+            raise ValueError('workbench 必须是对象')
+        capture_id = data['workbench'].get('capture_id', '')
+        if capture_id != '':
+            identifier(capture_id)
     data.setdefault('role', 'normal')
     if data['role'] not in {'normal', 'success', 'failure', 'fallback'}:
         raise ValueError('无效 State role')
