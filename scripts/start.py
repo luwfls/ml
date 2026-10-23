@@ -102,7 +102,7 @@ def find_adb(root, value):
 
 def server_command(python, adb, args):
     command = [str(python), '-m', 'automation', '--adb', str(adb), '--data', 'data', '--port', str(args.port)]
-    if getattr(args, 'platform_only', False):
+    if getattr(args, 'platform_only', False) or getattr(args, 'no_adb', False):
         command.append('--no-adb')
     if args.no_ocr:
         command.append('--no-ocr')
@@ -129,6 +129,7 @@ def run_server(command):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Prepare and start the Android automation workbench')
     parser.add_argument('--adb', default='adb')
+    parser.add_argument('--no-adb', action='store_true', help='Skip Android tools while keeping OCR available for imported screenshots')
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--ocr-config', type=Path)
     parser.add_argument('--no-ocr', action='store_true')
@@ -150,7 +151,7 @@ def main(argv=None):
             raise RuntimeError('OCR config file does not exist. Paths are relative to the project directory.')
         if not args.setup_only:
             check_port(args.port)
-        adb = 'adb' if args.platform_only else find_adb(root, args.adb)
+        adb = 'adb' if args.platform_only or args.no_adb else find_adb(root, args.adb)
         environment = root / '.venv'
         python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
         if not python.is_file():

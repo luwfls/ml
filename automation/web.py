@@ -276,7 +276,7 @@ def create_server(store, port=8765, adb='adb', ocr=None):
             path = urlparse(self.path).path
             try:
                 if path == '/api/health':
-                    return self.reply({'python_bits': struct.calcsize('P') * 8, 'ocr': 'ready' if ocr is not None else 'disabled'})
+                    return self.reply({'python_bits': struct.calcsize('P') * 8, 'ocr': 'ready' if ocr is not None else 'disabled', 'adb': 'enabled' if adb is not None else 'disabled'})
                 if path == '/api/devices':
                     return self.reply([] if adb is None else list_devices(adb))
                 if path == '/api/states':

@@ -13,6 +13,23 @@ from scripts.start import build_frontend, install_python, validate_python, check
 
 
 class StartupTests(unittest.TestCase):
+    def test_no_adb_mode_keeps_ocr_and_full_dependencies_available(self):
+        previous = Path.cwd()
+        try:
+            with patch('scripts.start.find_adb') as adb, \
+                 patch('scripts.start.run'), \
+                 patch('scripts.start.check_port'), \
+                 patch('scripts.start.install_python') as install, \
+                 patch('scripts.start.build_frontend'), \
+                 patch('scripts.start.run_server', return_value=0) as server:
+                self.assertEqual(main(['--no-adb']), 0)
+                adb.assert_not_called()
+                self.assertFalse(install.call_args.kwargs['platform_only'])
+                command = server.call_args.args[0]
+                self.assertIn('--no-adb', command)
+                self.assertNotIn('--no-ocr', command)
+        finally:
+            os.chdir(previous)
     def test_platform_setup_skips_adb_and_selects_minimal_dependencies(self):
         previous = Path.cwd()
         try:

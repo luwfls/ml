@@ -1,6 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const model = await import('../frontend/src/model.js').catch(() => ({}));
+test('preview explains missing screenshots and OCR while explicit image-only preview leaves draft unchanged',async()=>{
+  const app=await component('App.vue'),originalFetch=globalThis.fetch,requests=[];
+  globalThis.fetch=async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({found:true,bbox:[1,2,3,4]})};};
+  try{
+    const editor=model.editState({id:'dual',name:'',recognition:{type:'combined',operator:'and',image:{asset:'a.png'},text:{texts:['OK']}},actions:[{type:'key',key:'back'}]});
+    const context={editor,busy:false,ocrReady:false,captureId:'',selection:{recognition:[]},canCrop:false,guard:fn=>fn()};
+    await assert.rejects(()=>app.methods.preview.call(context),/先导入/);
+    context.captureId='capture-a';await assert.rejects(()=>app.methods.preview.call(context),/OCR/);
+    assert.equal(requests.length,0);
+    await app.methods.preview.call(context,true);
+    assert.equal(requests.length,1);assert.equal(requests[0].path,'/api/preview');
+    assert.equal(requests[0].body.state.recognition.type,'image');assert.deepEqual(requests[0].body.state.actions,[]);
+    assert.equal(context.probe.preview_scope,'image');assert.equal(editor.kind,'combined');assert.equal(editor.name,'');
+    assert.equal(editor.actions[0].key,'back');assert.equal(context.busy,false);
+  }finally{globalThis.fetch=originalFetch;}
+});
+test('execution explains device mode, device selection, save and OCR prerequisites',async()=>{
+  const app=await component('App.vue');
+  const context={locked:false,busy:false,adbReady:false,serial:'',editor:{original:{}},guard:fn=>fn()};
+  await assert.rejects(()=>app.methods.execute.call(context),/未启用 ADB/);
+  context.adbReady=true;await assert.rejects(()=>app.methods.execute.call(context),/选择在线 ADB 设备/);
+  context.serial='one';await assert.rejects(()=>app.methods.execute.call(context),/先保存/);
+  context.editor.original={id:'one',recognition:{type:'text'}};context.ocrReady=false;
+  await assert.rejects(()=>app.methods.execute.call(context),/启用 OCR/);
+});
 test('blank State name focuses the required field and keeps the save drawer open without API or crop',async()=>{
   const app=await component('App.vue'),originalFetch=globalThis.fetch;let requests=0,focused=0,crops=0;
   globalThis.fetch=async()=>{requests++;throw new Error('should not request');};

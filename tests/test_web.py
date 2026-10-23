@@ -55,6 +55,7 @@ class WebTests(unittest.TestCase):
         with patch('automation.web.list_devices', side_effect=AssertionError('ADB called')), \
              patch('automation.web.AdbDevice', side_effect=AssertionError('ADB called')):
             self.assertEqual(self.request('/api/devices'), [])
+            self.assertEqual(self.request('/api/health')['adb'], 'disabled')
             self.test_health_and_state_roundtrip()
             self.test_crop_and_preview_without_device()
             self.test_built_frontend_assets_are_served()

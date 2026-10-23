@@ -178,7 +178,18 @@ def main():
                         expect(drawer.get_by_role('checkbox', name='文字匹配', exact=True)).to_be_checked()
                         expect(drawer.locator('input[type=radio][value=or]')).to_be_checked()
                         assert field(drawer, '候选文案').locator('input').evaluate_all('(nodes)=>nodes.map(node=>node.value)') == ['CONFIRM', '完成']
-                        expect(drawer.get_by_role('button', name='识别预览', exact=True)).to_be_disabled()
+                        expect(drawer.get_by_role('button', name='识别预览', exact=True)).to_be_enabled()
+                        drawer.get_by_role('button', name='识别预览', exact=True).click()
+                        expect(drawer.locator('.el-alert--error')).to_contain_text('当前未启用 OCR')
+                        with page.expect_response(lambda r: r.url.endswith('/api/preview')) as image_preview:
+                            drawer.get_by_role('button', name='仅图片预览', exact=True).click()
+                        assert image_preview.value.ok, image_preview.value.text()
+                        expect(page.locator('.preview-results')).to_contain_text('仅图片预览（未判断文字及图文关系）')
+                        expect(page.locator('.preview-results')).to_contain_text('命中')
+                        page.screenshot(path=str(args.artifacts / 'preview-image-only.png'), full_page=True)
+                        expect(drawer.get_by_role('button', name='执行动作 F5', exact=True)).to_be_enabled()
+                        drawer.get_by_role('button', name='执行动作 F5', exact=True).click()
+                        expect(drawer.locator('.el-alert--error')).to_contain_text('选择在线 ADB 设备')
                         page.locator('input[type=file]').set_input_files(data / 'browser-page.png')
                         expect(canvas).to_be_visible()
                         # Text-only configuration is also supported, without losing candidate text.
@@ -404,7 +415,7 @@ def main():
                             page.locator('.state-card').filter(has_text='capture-edge').click()
                             expect(canvas).not_to_be_visible()
                             if capture_link:
-                                expect(page.locator('.el-alert--error')).to_contain_text('完整截图不存在或加载失败')
+                                expect(drawer.locator('.el-alert--error')).to_contain_text('完整截图不存在或加载失败')
                             else:
                                 expect(page.get_by_text('此 State 尚未关联完整截图，请重新导入原图并保存一次。', exact=True)).to_be_visible()
                             assert page.request.post(base + '/api/states/delete', data={'id': 'capture-edge'}).ok
