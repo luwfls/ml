@@ -9,10 +9,36 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.start import build_frontend, install_python, validate_python, check_port, server_command, run_server, main
+from scripts.start import build_frontend, install_python, validate_python, validate_ocr_platform, check_port, server_command, run_server, main
 
 
 class StartupTests(unittest.TestCase):
+    def test_macos_ocr_wheel_requirements(self):
+        validate_ocr_platform('Darwin', 'arm64', '14.0')
+        validate_ocr_platform('Darwin', 'arm64', '15.7.1')
+        validate_ocr_platform('Linux', 'x86_64', '')
+        validate_ocr_platform('Windows', 'AMD64', '')
+        with self.assertRaisesRegex(RuntimeError, 'Rosetta'):
+            validate_ocr_platform('Darwin', 'x86_64', '15.0')
+        with self.assertRaisesRegex(RuntimeError, 'macOS 14\\+'):
+            validate_ocr_platform('Darwin', 'arm64', '13.7')
+
+    def test_unsupported_macos_fails_before_dependency_install_but_allows_platform_mode(self):
+        previous = Path.cwd()
+        try:
+            with patch('scripts.start.platform.system', return_value='Darwin'), \
+                 patch('scripts.start.platform.machine', return_value='x86_64'), \
+                 patch('scripts.start.platform.mac_ver', return_value=('15.0', (), '')), \
+                 patch('scripts.start.run'), \
+                 patch('scripts.start.install_python') as install, \
+                 patch('scripts.start.build_frontend'):
+                self.assertEqual(main(['--no-adb', '--setup-only']), 1)
+                install.assert_not_called()
+                self.assertEqual(main(['--platform-only', '--setup-only']), 0)
+                self.assertTrue(install.call_args.kwargs['platform_only'])
+        finally:
+            os.chdir(previous)
+
     def test_no_adb_mode_keeps_ocr_and_full_dependencies_available(self):
         previous = Path.cwd()
         try:

@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import os
+import platform
 from pathlib import Path
 import shutil
 import socket
@@ -20,6 +21,21 @@ def validate_python(version, bits, free_threaded):
         raise RuntimeError('Install standard Python 3.14 x64 (64-bit), then run this launcher again.')
     if free_threaded:
         raise RuntimeError('Use standard Python, not the free-threaded build; OCR wheels use the standard ABI.')
+
+
+def validate_ocr_platform(system, machine, macos):
+    if system != 'Darwin':
+        return
+    if machine != 'arm64':
+        raise RuntimeError(
+            f'ONNX Runtime 1.30.0 has no Python 3.14 macOS wheel for {machine}. '
+            'On Apple Silicon, use native arm64 Python 3.14 (not Rosetta) and recreate .venv. '
+            'Intel Macs cannot use this OCR dependency set. '
+            'Use bash ./start-platform.sh for image-only mode; see docs/platform-startup.md.')
+    if int(macos.split('.')[0]) < 14:
+        raise RuntimeError(
+            f'ONNX Runtime 1.30.0 requires macOS 14+ on arm64; detected macOS {macos}. '
+            'Upgrade macOS to enable OCR; see docs/platform-startup.md.')
 
 
 def fingerprint(root, files):
@@ -143,6 +159,10 @@ def main(argv=None):
     os.chdir(root)
     try:
         validate_python(sys.version_info, struct.calcsize('P') * 8, bool(sysconfig.get_config_var('Py_GIL_DISABLED')))
+        if not args.platform_only:
+            if platform.system() == 'Darwin':
+                print(f'OCR environment: Python {platform.python_version()}, {platform.machine()}, macOS {platform.mac_ver()[0]}; {sys.executable}', flush=True)
+            validate_ocr_platform(platform.system(), platform.machine(), platform.mac_ver()[0])
         if not 1 <= args.port <= 65535:
             raise RuntimeError('Port must be between 1 and 65535.')
         if args.no_ocr and args.ocr_config:
