@@ -4,13 +4,13 @@
 
 一键启动前后端：Mac 双击根目录 `start-macos.command`，或在项目目录执行 `bash ./start.sh`；Windows 双击 `start-windows.cmd`。启动成功后访问 http://127.0.0.1:8765，无需另开前端终端。Ctrl+C 停止服务。
 
-首次启动会创建 `.venv`、安装锁定依赖并构建前端；需要标准 Python 3.14 64 位、ADB，以及 Node.js LTS（部署包已有匹配的前端构建时无需 Node）。首次安装需要联网，后续复用已有环境和构建。将 Android platform-tools 解压到项目的 `platform-tools` 目录，或将 adb 加入 PATH；也可指定 `bash ./start.sh --adb "/路径/platform-tools/adb"`。
+首次启动会创建虚拟环境、安装锁定依赖并构建前端；需要标准 Python 64 位（Intel Mac 为 3.13，其他环境为 3.14）、ADB，以及 Node.js LTS（部署包已有匹配的前端构建时无需 Node）。Intel Mac 使用独立 `.venv-intel` 和 `requirements-macos-intel.txt`；其他环境使用 `.venv`。首次安装需要联网，后续复用已有环境和构建。将 Android platform-tools 解压到项目的 `platform-tools` 目录，或将 adb 加入 PATH；也可指定 `bash ./start.sh --adb "/路径/platform-tools/adb"`。仅调试导入截图并启用 OCR 时用 `bash ./start.sh --no-adb`，无需 ADB。
 
 命令入口支持 `--no-ocr`（仅图片模式）、`--port 8766`、`--ocr-config ocr.local.json`、`--setup-only`（只准备环境）、`--refresh`（重装依赖/重建）。`--no-ocr` 只关闭运行时 OCR，仍安装完整锁定依赖，平台支持要求同下文。Mac 若提示脚本没有执行权限，执行 `chmod +x start-macos.command start.sh`；若系统阻止打开，请在 Finder 中右键打开并按系统提示确认。程序不会自动安装系统 Python/Node/ADB。
 
 Windows 使用根目录 `start-windows.cmd`，部署步骤见 windows-deployment.md。源码前端构建为 `npm ci`、`npm run build`，构建后由后端同时提供页面和 API：http://127.0.0.1:8765。
 
-Mac/Linux 前后端开发分别启动：
+Mac/Linux 前后端开发分别启动（Intel Mac 请优先使用上述一键启动器，独立环境及兼容说明见 `docs/platform-startup.md`）：
 
 ```bash
 # 在项目目录中，使用标准 Python 3.14 64 位
@@ -21,7 +21,7 @@ python3.14 -m venv .venv
 
 另一终端在同一目录执行 `npm ci`、`npm run dev`，打开 http://127.0.0.1:5173。前端代理后端 8765；保持两个终端打开，停止时分别 Ctrl+C。
 
-仅验证管理页面可在新虚拟环境只安装 `numpy==2.5.3` 和 `opencv-python==5.0.0.93`，再用 `--no-ocr` 启动后端。无需 ADB 即可导入 PNG 制作图片 State；文字预览必须启用 OCR，设备截图和执行动作必须安装 ADB 并选择授权设备。Python 3.14 的 ONNX Runtime 1.30.0 macOS wheel 仅提供 arm64（macOS 14+）；Intel Mac 先使用无 OCR 模式。当前 OpenCV wheel 要求 Apple Silicon macOS 13+、Intel macOS 14+。
+仅验证管理页面可用 `bash ./start-platform.sh`，不安装或加载 OCR。无需 ADB 即可导入 PNG 制作图片 State；文字预览必须启用 OCR，设备截图和执行动作必须安装 ADB 并选择授权设备。Python 3.14 的 ONNX Runtime 1.30.0 macOS wheel 仅提供 arm64；Intel Mac 由启动器选择 Python 3.13 + ONNX Runtime 1.20.1。完整 OCR 模式要求 macOS 14+，详见 `docs/platform-startup.md`。
 
 ### 手动多设备任务
 

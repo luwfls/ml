@@ -16,9 +16,10 @@ def run(arguments, **kwargs):
     return subprocess.run([str(arg) for arg in arguments], check=True, **kwargs)
 
 
-def validate_python(version, bits, free_threaded):
-    if tuple(version[:2]) != (3, 14) or bits != 64:
-        raise RuntimeError('Install standard Python 3.14 x64 (64-bit), then run this launcher again.')
+def validate_python(version, bits, free_threaded, intel_macos=False):
+    expected = (3, 13) if intel_macos else (3, 14)
+    if tuple(version[:2]) != expected or bits != 64:
+        raise RuntimeError(f'Install standard Python {expected[0]}.{expected[1]} (64-bit), then run this launcher again.')
     if free_threaded:
         raise RuntimeError('Use standard Python, not the free-threaded build; OCR wheels use the standard ABI.')
 
@@ -26,15 +27,11 @@ def validate_python(version, bits, free_threaded):
 def validate_ocr_platform(system, machine, macos):
     if system != 'Darwin':
         return
-    if machine != 'arm64':
-        raise RuntimeError(
-            f'ONNX Runtime 1.30.0 has no Python 3.14 macOS wheel for {machine}. '
-            'On Apple Silicon, use native arm64 Python 3.14 (not Rosetta) and recreate .venv. '
-            'Intel Macs cannot use this OCR dependency set. '
-            'Use bash ./start-platform.sh for image-only mode; see docs/platform-startup.md.')
+    if machine not in {'arm64', 'x86_64'}:
+        raise RuntimeError(f'Unsupported macOS architecture: {machine}; see docs/platform-startup.md.')
     if int(macos.split('.')[0]) < 14:
         raise RuntimeError(
-            f'ONNX Runtime 1.30.0 requires macOS 14+ on arm64; detected macOS {macos}. '
+            f'The locked OCR dependencies require macOS 14+; detected macOS {macos}. '
             'Upgrade macOS to enable OCR; see docs/platform-startup.md.')
 
 
@@ -50,10 +47,10 @@ def cached(marker, value):
     return marker.is_file() and marker.read_text(encoding='ascii').strip() == value
 
 
-def install_python(root, python, refresh=False, platform_only=False):
-    requirements = root / ('requirements-platform.txt' if platform_only else 'requirements-tested.txt')
+def install_python(root, python, refresh=False, platform_only=False, intel_macos=False):
+    requirements = root / ('requirements-platform.txt' if platform_only else 'requirements-macos-intel.txt' if intel_macos else 'requirements-tested.txt')
     value = fingerprint(root, [requirements])
-    marker = root / '.venv' / 'startup-requirements.sha256'
+    marker = root / ('.venv-intel' if intel_macos else '.venv') / 'startup-requirements.sha256'
     if refresh or not cached(marker, value):
         print('Installing locked Python dependencies (first setup requires Internet)...', flush=True)
         run([python, '-m', 'pip', 'install', '-r', requirements])
@@ -158,7 +155,8 @@ def main(argv=None):
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
     try:
-        validate_python(sys.version_info, struct.calcsize('P') * 8, bool(sysconfig.get_config_var('Py_GIL_DISABLED')))
+        intel_macos = platform.system() == 'Darwin' and platform.machine() == 'x86_64'
+        validate_python(sys.version_info, struct.calcsize('P') * 8, bool(sysconfig.get_config_var('Py_GIL_DISABLED')), intel_macos)
         if not args.platform_only:
             if platform.system() == 'Darwin':
                 print(f'OCR environment: Python {platform.python_version()}, {platform.machine()}, macOS {platform.mac_ver()[0]}; {sys.executable}', flush=True)
@@ -172,15 +170,16 @@ def main(argv=None):
         if not args.setup_only:
             check_port(args.port)
         adb = 'adb' if args.platform_only or args.no_adb else find_adb(root, args.adb)
-        environment = root / '.venv'
+        environment = root / ('.venv-intel' if intel_macos else '.venv')
         python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
         if not python.is_file():
             if environment.exists():
-                raise RuntimeError('Existing .venv is incomplete or from another OS. Rename it and run the launcher again.')
+                raise RuntimeError(f'Existing {environment.name} is incomplete or from another OS. Rename it and run the launcher again.')
             run([sys.executable, '-m', 'venv', environment])
-        probe = "import struct,sys,sysconfig; assert sys.version_info[:2]==(3,14) and struct.calcsize('P')*8==64 and not sysconfig.get_config_var('Py_GIL_DISABLED'), 'Rename incompatible .venv and restart'"
+        expected = (3, 13) if intel_macos else (3, 14)
+        probe = f"import struct,sys,sysconfig; assert sys.version_info[:2]=={expected!r} and struct.calcsize('P')*8==64 and not sysconfig.get_config_var('Py_GIL_DISABLED'), 'Rename incompatible {environment.name} and restart'"
         run([python, '-c', probe])
-        install_python(root, python, args.refresh, platform_only=args.platform_only)
+        install_python(root, python, args.refresh, platform_only=args.platform_only, intel_macos=intel_macos)
         build_frontend(root, args.refresh)
         if args.setup_only:
             print('Setup complete. No server was started.', flush=True)

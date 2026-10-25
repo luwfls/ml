@@ -24,9 +24,9 @@ SCM-581 的安卓 State 自动化工作台，支持通过截图制作图片或�
 
 **Mac 纯平台模式（无需 ADB）：** `bash ./start-platform.sh`，或双击 `start-platform-macos.command`。自动准备前后端，打开 http://127.0.0.1:8765；默认不安装/加载 OCR，支持导入 PNG 与配置管理。首次准备和可用功能见 [纯平台启动说明](docs/platform-startup.md)。
 
-一键启动：Mac 双击 `start-macos.command`，Mac/Linux 执行 `bash ./start.sh`，Windows 双击 `start-windows.cmd`。自动准备 Python 环境和前端构建，随后在 http://127.0.0.1:8765 同时提供页面与 API；Ctrl+C 停止。首次运行需标准 Python 3.14 64 位、ADB 和 Node.js LTS（预构建部署包可省 Node），详见 [启动及使用说明](docs/workbench-usage.md)。
+一键启动：Mac 双击 `start-macos.command`，Mac/Linux 执行 `bash ./start.sh`，Windows 双击 `start-windows.cmd`。自动准备 Python 环境和前端构建，随后在 http://127.0.0.1:8765 同时提供页面与 API；Ctrl+C 停止。首次运行需标准 Python 64 位（Intel Mac 为 3.13，其他为 3.14）、ADB 和 Node.js LTS（预构建部署包可省 Node）。Intel Mac 需 macOS 14+，自动使用 `.venv-intel` 和兼容 OCR 依赖；仅调试导入截图并启用 OCR 时执行 `bash ./start.sh --no-adb`，无需 ADB。详见 [启动及使用说明](docs/workbench-usage.md)。
 
-确保 PATH 中 `python` 指向 **64 位 Python**，ADB 已安装并能列出目标设备。后端入口会拒绝 32 位解释器。
+以下为标准 Python 3.14 环境的手动启动示例；Intel Mac 请使用上面的一键命令及独立依赖，避免安装不兼容的 `requirements.txt`。确保 PATH 中 `python` 指向 **64 位 Python**，ADB 已安装并能列出目标设备。后端入口会拒绝 32 位解释器。
 
 ```bash
 python -c "import struct; assert struct.calcsize('P') * 8 == 64"
@@ -122,7 +122,7 @@ npm run build
 .venv/bin/python -m compileall -q automation
 ```
 
-Windows 将 `.venv/bin/python` 换成 `.\.venv\Scripts\python.exe`。`requirements-tested.txt` 记录本次 Python 3.14.7 x64 环境中的依赖版本；未宣称其他 Python/OCR 组合已验证。
+Windows 将 `.venv/bin/python` 换成 `.\.venv\Scripts\python.exe`，Intel Mac 使用 `.venv-intel/bin/python`。`requirements-tested.txt` 记录 Python 3.14 环境依赖；Intel Mac 独立锁定在 `requirements-macos-intel.txt`。Python 3.13 + ONNX Runtime 1.20.1 已在 Linux 验证真实中文 OCR 及预览接口，Mac x86_64 安装包获取检查通过，Mac 实机待验证。
 
 测试使用固定图像和替身设备，覆盖截图字节、图片坐标/歧义、文字匹配与缓存、循环计数/条件/停止/兜底、保存、API、独立结果证据、写盘失败、构建文件服务；新增真实 CPU OCR 离线识别、四边形坐标转换、本地配置、字典校验、并发保护、文字预览和执行。`tests/fixtures/ocr-ui.png` 是用 Noto Sans CJK 绘制的合成测试图，不是真实业务截图。本次未连接真机/POS，也未完成真实业务端到端验收；浏览器自动化已使用替身设备通过。
 

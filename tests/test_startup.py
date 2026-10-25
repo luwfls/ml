@@ -2,6 +2,7 @@ import argparse
 import socket
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,28 +17,75 @@ class StartupTests(unittest.TestCase):
     def test_macos_ocr_wheel_requirements(self):
         validate_ocr_platform('Darwin', 'arm64', '14.0')
         validate_ocr_platform('Darwin', 'arm64', '15.7.1')
+        validate_ocr_platform('Darwin', 'x86_64', '14.0')
         validate_ocr_platform('Linux', 'x86_64', '')
         validate_ocr_platform('Windows', 'AMD64', '')
-        with self.assertRaisesRegex(RuntimeError, 'Rosetta'):
-            validate_ocr_platform('Darwin', 'x86_64', '15.0')
+        with self.assertRaisesRegex(RuntimeError, 'architecture'):
+            validate_ocr_platform('Darwin', 'unknown', '15.0')
         with self.assertRaisesRegex(RuntimeError, 'macOS 14\\+'):
             validate_ocr_platform('Darwin', 'arm64', '13.7')
+        with self.assertRaisesRegex(RuntimeError, 'macOS 14\\+'):
+            validate_ocr_platform('Darwin', 'x86_64', '13.7')
 
-    def test_unsupported_macos_fails_before_dependency_install_but_allows_platform_mode(self):
+    def test_intel_macos_selects_python_313_separate_environment_and_lock(self):
         previous = Path.cwd()
         try:
             with patch('scripts.start.platform.system', return_value='Darwin'), \
                  patch('scripts.start.platform.machine', return_value='x86_64'), \
                  patch('scripts.start.platform.mac_ver', return_value=('15.0', (), '')), \
+                 patch('scripts.start.sys.version_info', (3, 13, 0)), \
                  patch('scripts.start.run'), \
                  patch('scripts.start.install_python') as install, \
-                 patch('scripts.start.build_frontend'):
-                self.assertEqual(main(['--no-adb', '--setup-only']), 1)
-                install.assert_not_called()
+                 patch('scripts.start.build_frontend'), \
+                 patch('scripts.start.run_server') as server:
+                self.assertEqual(main(['--no-adb', '--setup-only']), 0)
+                self.assertTrue(install.call_args.kwargs['intel_macos'])
+                self.assertFalse(install.call_args.kwargs['platform_only'])
+                self.assertEqual(install.call_args.args[1].parent.parent.name, '.venv-intel')
+                server.assert_not_called()
                 self.assertEqual(main(['--platform-only', '--setup-only']), 0)
                 self.assertTrue(install.call_args.kwargs['platform_only'])
         finally:
             os.chdir(previous)
+
+    def test_intel_python_version_and_dependency_cache(self):
+        validate_python((3, 13), 64, False, intel_macos=True)
+        with self.assertRaisesRegex(RuntimeError, '3.13'):
+            validate_python((3, 14), 64, False, intel_macos=True)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.venv-intel').mkdir()
+            (root / 'requirements-macos-intel.txt').write_text('onnxruntime==1.20.1')
+            with patch('scripts.start.run') as run:
+                install_python(root, 'python3.13', intel_macos=True)
+                self.assertEqual(run.call_args_list[0].args[0][-1].name, 'requirements-macos-intel.txt')
+            self.assertTrue((root / '.venv-intel/startup-requirements.sha256').exists())
+            self.assertFalse((root / '.venv/startup-requirements.sha256').exists())
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX shell launcher')
+    def test_intel_shell_launcher_ignores_old_314_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'start.sh').write_text((Path(__file__).resolve().parents[1] / 'start.sh').read_text())
+            (root / 'bin').mkdir()
+            (root / 'bin/dirname').symlink_to(shutil.which('dirname'))
+            (root / '.venv/bin').mkdir(parents=True)
+            scripts = {
+                'bin/uname': '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else echo x86_64; fi\n',
+                'bin/python3.13': '#!/bin/sh\nprintf "%s\\n" "$@" > "$WORKBENCH_ARG_LOG"\n',
+                '.venv/bin/python': '#!/bin/sh\nexit 91\n',
+            }
+            for name, text in scripts.items():
+                (root / name).write_text(text)
+                (root / name).chmod(0o755)
+            env = dict(os.environ, PATH=str(root / 'bin'), WORKBENCH_ARG_LOG=str(root / 'args'))
+            result = subprocess.run(['/bin/bash', str(root / 'start.sh'), '--no-adb'], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / 'args').read_text().splitlines(), ['scripts/start.py', '--no-adb'])
+            (root / 'bin/python3.13').unlink()
+            result = subprocess.run(['/bin/bash', str(root / 'start.sh')], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('Python 3.13', result.stderr)
 
     def test_no_adb_mode_keeps_ocr_and_full_dependencies_available(self):
         previous = Path.cwd()
