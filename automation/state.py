@@ -318,7 +318,8 @@ class Store:
         flow.setdefault('name', flow['id'])
         if not isinstance(flow['name'], str) or not flow['name'].strip():
             raise ValueError('流程名称不能为空')
-        validate_flow(flow, self.load_all())
+        flow.setdefault('state_ids', [])
+        validate_flow(flow, self.load_all(), allow_empty=True)
         self.write_json(self.flows / (flow['id'] + '.json'), flow)
         return flow
 

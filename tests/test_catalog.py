@@ -53,6 +53,29 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(Store(self.tmp.name).list_flows()), 2)
         self.assertEqual(json.loads(self.store.root.joinpath('flow.json').read_text()), legacy)
         with self.assertRaises(ValueError): self.store.delete_state('done')
+
+    def test_flow_without_states_generates_id_and_can_be_saved_copied_and_reopened(self):
+        from automation.runner import validate_flow
+        for values in [{}, {'state_ids': []}]:
+            saved = self.store.save_flow({'name': '待配置流程', **values})
+            self.assertTrue(saved['id'])
+            self.assertEqual(saved['state_ids'], [])
+            updated = self.store.save_flow({**saved, 'name': '稍后配置'})
+            self.assertEqual(updated['id'], saved['id'])
+            copied = self.store.copy_flow(saved['id'], name='流程副本')
+            self.assertNotEqual(copied['id'], saved['id'])
+            self.assertEqual(copied['state_ids'], [])
+            self.assertIn(updated, Store(self.tmp.name).list_flows())
+            with self.assertRaisesRegex(ValueError, '启动流程前请选择 State'):
+                validate_flow(saved, [])
+        for ids in [None, 'done', ['missing']]:
+            with self.assertRaises(ValueError):
+                self.store.save_flow({'name': '无效引用', 'state_ids': ids})
+        self.store.save(state('done', role='success'))
+        filled = self.store.save_flow({'name': '清空选择', 'state_ids': ['done']})
+        cleared = self.store.save_flow({**filled, 'state_ids': []})
+        self.assertEqual(cleared['id'], filled['id'])
+        self.assertEqual(cleared['state_ids'], [])
     def test_group_failure_rolls_back_states_and_assets(self):
         from unittest.mock import patch
         self.store.assets.joinpath('a.png').write_bytes(b'a')

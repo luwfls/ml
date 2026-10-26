@@ -4,15 +4,17 @@ import time
 from .state import number, validate_state
 
 
-def validate_flow(flow, states):
+def validate_flow(flow, states, *, allow_empty=False):
     if not isinstance(flow, dict):
         raise ValueError('流程必须是对象')
     if 'dry_run' in flow and not isinstance(flow['dry_run'], bool):
         raise ValueError('dry_run 必须为布尔值')
     known = {s['id']: s for s in states}
     ids = flow.get('state_ids')
-    if not isinstance(ids, list) or not ids or any(s not in known for s in ids):
+    if not isinstance(ids, list) or any(s not in known for s in ids):
         raise ValueError('流程必须引用存在的 State')
+    if not ids and not allow_empty:
+        raise ValueError('启动流程前请选择 State（至少包含一个成功 State）')
     number(flow.get('max_rounds', 200), 1, 10000)
     number(flow.get('timeout_seconds', 300), .01, 3600)
     number(flow.get('poll_ms', 1000), 0, 10000)
@@ -25,7 +27,7 @@ def validate_flow(flow, states):
         for ref in state['conditions']['required_states'] + state['conditions']['excluded_states']:
             if ref not in known:
                 raise ValueError(f'条件引用不存在: {ref}')
-    if not any(known[s]['role'] == 'success' for s in ids):
+    if ids and not any(known[s]['role'] == 'success' for s in ids):
         raise ValueError('首版流程至少需要一个成功 State')
     return known
 

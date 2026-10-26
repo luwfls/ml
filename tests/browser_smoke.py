@@ -308,21 +308,37 @@ def main():
 
                         page.get_by_role('button', name='循环流程', exact=True).click()
                         form = page.locator('.flow-layout .el-card').nth(1)
-                        field(form, '流程 ID').locator('input').fill('receive-loop')
+                        expect(field(form, '流程 ID')).to_have_count(0)
+                        expect(form.get_by_text('配置 JSON 预览', exact=True)).to_have_count(0)
                         field(form, '名称').locator('input').fill('收货循环')
                         field(form, '完成次数').locator('input').fill('2')
                         field(form, '轮间等待 ms').locator('input').fill('100')
                         field(form, '超时（秒）').locator('input').fill('30')
+                        with page.expect_response(lambda r: r.url.endswith('/api/flows') and r.request.method == 'POST') as empty_flow_response:
+                            form.get_by_role('button', name='保存流程', exact=True).click()
+                        assert empty_flow_response.value.ok, empty_flow_response.value.text()
+                        empty_flow = empty_flow_response.value.json()
+                        receive_flow_id = empty_flow['id']
+                        assert receive_flow_id and empty_flow['state_ids'] == []
+                        expect(page.locator('.flow-card').filter(has_text='收货循环')).to_be_visible()
+                        expect(form.get_by_role('button', name='保存并启动', exact=True)).to_be_disabled()
+                        expect(form.get_by_role('button', name='复制', exact=True)).to_be_enabled()
+                        expect(page.locator('.flow-layout')).not_to_contain_text(receive_flow_id)
+                        expect(page.locator('.el-message')).to_have_count(0)
+                        page.screenshot(path=str(args.artifacts / 'flow-optional-states.png'), full_page=True)
                         field(form, '按分组添加').locator('.el-select').click()
                         page.locator('.el-select-dropdown__item:visible').filter(has_text='收货验证').click()
                         form.get_by_role('button', name='添加当前分组', exact=True).click()
                         form.get_by_role('button', name='保存流程', exact=True).click()
-                        expect(page.locator('.flow-card').filter(has_text='receive-loop')).to_be_visible()
+                        expect(page.locator('.flow-card').filter(has_text='收货循环')).to_be_visible()
+                        expect(page.locator('.flow-layout')).not_to_contain_text(api('/api/states')[0]['id'])
                         form.get_by_role('button', name='复制', exact=True).click()
-                        prompt('receive-copy')
-                        expect(page.locator('.flow-card').filter(has_text='receive-copy')).to_be_visible()
+                        expect(page.locator('.el-message-box:visible')).to_contain_text('新流程名称')
+                        prompt('收货循环副本')
+                        expect(page.locator('.flow-card').filter(has_text='收货循环副本')).to_be_visible()
                         assert len(api('/api/flows')) == 2
-                        page.locator('.flow-card').filter(has_text='receive-loop').click()
+                        assert len({f['id'] for f in api('/api/flows')}) == 2
+                        page.locator('.flow-card').filter(has=page.get_by_text('收货循环', exact=True)).click()
                         form.get_by_role('button', name='保存并启动', exact=True).click()
                         for _ in range(100):
                             runs = api('/api/runs')
@@ -356,18 +372,18 @@ def main():
                         page.locator('.el-select-dropdown__item:visible').filter(has_text=run_id).click()
                         expect(panel.locator('.run-summary')).to_contain_text('cancelled')
                         # Keep process-based tasks alive while browser screenshots/control run.
-                        saved_flow = next(f for f in api('/api/flows') if f['id'] == 'receive-loop')
+                        saved_flow = next(f for f in api('/api/flows') if f['id'] == receive_flow_id)
                         assert page.request.post(base + '/api/flows', data={**saved_flow, 'completion_count': 100}).ok
                         page.get_by_role('button', name='任务', exact=True).click()
                         tasks = page.locator('.task-panel')
                         tasks.get_by_role('button', name='新建任务', exact=True).click()
                         field(tasks, '任务名称').locator('input').fill('多设备收货验证')
                         field(tasks, '关联流程').locator('.el-select').click()
-                        page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('^收货循环 · receive-loop$')).click()
+                        page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('^收货循环$')).click()
                         tasks.get_by_role('button', name='保存任务', exact=True).click()
                         expect(tasks.locator('.task-card')).to_have_count(1)
                         task = api('/api/tasks')[0]
-                        assert task['id'] and task['flow_id'] == 'receive-loop'
+                        assert task['id'] and task['flow_id'] == receive_flow_id
                         tasks.get_by_role('button', name='手动启动', exact=True).click()
                         dialog = page.locator('.el-dialog:visible')
                         field(dialog, 'ADB 设备').locator('.el-select').click()

@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const model = await import('../frontend/src/model.js').catch(() => ({}));
+test('copying a flow asks for its name and lets the server assign the new ID',async()=>{
+  const app=await component('App.vue'),requests=[],originalFetch=globalThis.fetch;
+  globalThis.fetch=async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({id:'generated',name:'副本',state_ids:[]})};};
+  try{
+    const context={flow:{id:'source',name:'原流程'},guard:fn=>fn(),$prompt:async(message,title,options)=>{assert.equal(message,'新流程名称');assert.equal(options.inputValue,'原流程 副本');return {value:'副本'};},reloadCatalog:async()=>{}};
+    await app.methods.copyFlow.call(context);
+    assert.deepEqual(requests,[{path:'/api/flows/copy',body:{id:'source',name:'副本'}}]);
+    assert.equal(context.flow.id,'generated');assert.equal(context.flow.name,'副本');
+  }finally{globalThis.fetch=originalFetch;}
+});
 test('preview explains missing screenshots and OCR while explicit image-only preview leaves draft unchanged',async()=>{
   const app=await component('App.vue'),originalFetch=globalThis.fetch,requests=[];
   globalThis.fetch=async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({found:true,bbox:[1,2,3,4]})};};
