@@ -6,7 +6,7 @@
       <el-form-item label="按分组添加"><el-select v-model="group" placeholder="选择分组"><el-option label="未分组" value="" /><el-option v-for="g in groups" :key="g.name" :label="g.name" :value="g.name" /></el-select><el-button @click="addGroup">添加当前分组</el-button></el-form-item>
     </el-form><p class="hint">成功 {{ counts.success }} / 失败 {{ counts.failure }} / 兜底 {{ counts.fallback }} · 新增 State 不会自动加入已保存流程。</p>
     <div class="reference-cards"><button v-for="s in selectedStates" :key="s.id" class="reference-card" @click="$emit('edit',s)"><img v-if="s.recognition.type==='image'" :src="'/assets/'+s.recognition.asset" /><span>{{ s.name }}</span><small>{{ s.role }}</small></button></div>
-    <div class="button-row"><el-button type="primary" :disabled="locked" @click="$emit('save')">保存流程</el-button><el-button type="success" :disabled="locked||!serial||!flow.state_ids.length" @click="$emit('start')">保存并启动</el-button><el-button :disabled="locked||!persisted" @click="$emit('copy')">复制</el-button><el-button type="danger" :disabled="locked||!persisted" @click="$emit('delete')">删除</el-button></div></el-card>
+    <div class="button-row"><el-button type="primary" :disabled="locked" @click="$emit('save')">保存流程</el-button><el-button type="success" :disabled="locked||!serial||!flow.state_ids.length" @click="$emit('start')">保存并启动</el-button><el-button :disabled="locked||!serial||!flow.state_ids.length" @click="$emit('debug')">步进调试</el-button><el-button :disabled="locked||!persisted" @click="$emit('copy')">复制</el-button><el-button type="danger" :disabled="locked||!persisted" @click="$emit('delete')">删除</el-button></div></el-card>
   </section>
 </template>
 <script>

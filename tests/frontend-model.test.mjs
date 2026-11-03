@@ -1,6 +1,68 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const model = await import('../frontend/src/model.js').catch(() => ({}));
+async function workbenchContext(){
+  const app=await component('App.vue'),vm={...app.data()};
+  for(const [key,fn] of Object.entries(app.methods))vm[key]=fn.bind(vm);
+  for(const [key,fn] of Object.entries(app.computed))Object.defineProperty(vm,key,{get:()=>fn.call(vm)});
+  vm.editor=model.editState({id:'original',name:'原编辑状态'});vm.drawer=true;
+  return vm;
+}
+test('pending capture locks the editor until its screenshot arrives',async()=>{
+  const old=globalThis.fetch;let resolve;
+  globalThis.fetch=()=>new Promise(r=>resolve=r);
+  try{
+    const vm=await workbenchContext();vm.serial='one';const pending=vm.capture();
+    assert.equal(vm.busy,true);vm.openState({id:'other',name:'另一状态'});assert.equal(vm.editor.id,'original');
+    resolve({ok:true,json:async()=>({id:'capture',url:'/captures/capture.png'})});await pending;
+    assert.equal(vm.busy,false);assert.equal(vm.editor.captureId,'capture');
+  }finally{globalThis.fetch=old;}
+});
+test('import locks before reading the file and releases the editor after errors',async()=>{
+  const vm=await workbenchContext();let reject;
+  const pending=vm.importImage({target:{value:'file',files:[{arrayBuffer:()=>new Promise((_,r)=>reject=r)}]}});
+  assert.equal(vm.busy,true);vm.openState({id:'other'});assert.equal(vm.editor.id,'original');
+  reject(new Error('文件读取失败'));await pending;assert.equal(vm.busy,false);assert.match(vm.error,/读取失败/);
+});
+test('flow input confirmation prevents duplicate starts and keeps the selected device',async()=>{
+  const old=globalThis.fetch,requests=[];let confirm;
+  globalThis.fetch=async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({id:'run'})};};
+  try{
+    const vm=await workbenchContext();vm.serial='one';vm.flow={id:'flow',dry_run:false};
+    vm.$confirm=()=>new Promise(r=>confirm=r);vm.persistFlow=async()=>vm.flow;vm.refreshRuns=async()=>{};vm.pollDetail=async()=>{};
+    const pending=vm.startFlow();assert.equal(vm.busy,true);vm.selectFlow({id:'other'});assert.equal(vm.flow.id,'flow');await vm.startFlow();vm.serial='other';confirm();await pending;
+    assert.equal(requests.length,1);assert.equal(requests[0].body.serial,'one');assert.equal(vm.busy,false);
+  }finally{globalThis.fetch=old;}
+});
+test('step and auto controls use the process debug endpoint',async()=>{
+  const old=globalThis.fetch,requests=[];
+  globalThis.fetch=async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({})};};
+  try{
+    const vm=await workbenchContext();vm.runId='step-run';vm.runData={id:'step-run'};vm.pollDetail=async()=>{};vm.refreshRuns=async()=>{};
+    await vm.controlRun('next');await vm.controlRun('auto');
+    assert.deepEqual(requests,[{path:'/api/debug/control',body:{id:'step-run',action:'next'}},{path:'/api/debug/control',body:{id:'step-run',action:'auto'}}]);
+  }finally{globalThis.fetch=old;}
+});
+test('step start sends the current draft and explicit recognition-only choice',async()=>{
+  const old=globalThis.fetch,requests=[];
+  globalThis.fetch=async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({results:[{id:'step'}]})};};
+  try{
+    const vm=await workbenchContext();vm.serial='one';vm.flow={name:'草稿',state_ids:['a'],dry_run:true};vm.refreshRuns=async()=>{};vm.pollDetail=async()=>{};
+    await vm.debugFlow();assert.deepEqual(requests,[{path:'/api/debug/start',body:{flow:vm.flow,serials:['one'],mode:'step',dry_run:true}}]);
+    assert.equal(vm.runId,'step');assert.equal(vm.busy,false);
+    vm.flow.dry_run=false;vm.$confirm=async()=>{throw 'cancel';};await vm.debugFlow();
+    assert.equal(requests.length,1);assert.equal(vm.busy,false);
+  }finally{globalThis.fetch=old;}
+});
+test('flow start stays locked until the run request finishes',async()=>{
+  const old=globalThis.fetch;let resolve,calls=0;
+  globalThis.fetch=()=>{calls++;return new Promise(r=>resolve=r);};
+  try{
+    const vm=await workbenchContext();vm.serial='one';vm.flow={dry_run:true};vm.persistFlow=async()=>vm.flow;vm.refreshRuns=async()=>{};vm.pollDetail=async()=>{};
+    const pending=vm.startFlow();await Promise.resolve();assert.equal(vm.busy,true);await vm.startFlow();assert.equal(calls,1);
+    resolve({ok:true,json:async()=>({id:'run'})});await pending;assert.equal(vm.busy,false);
+  }finally{globalThis.fetch=old;}
+});
 test('copying a flow asks for its name and lets the server assign the new ID',async()=>{
   const app=await component('App.vue'),requests=[],originalFetch=globalThis.fetch;
   globalThis.fetch=async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({id:'generated',name:'副本',state_ids:[]})};};

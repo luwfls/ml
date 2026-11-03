@@ -4,17 +4,19 @@ Run with a Python environment containing playwright and --python pointing at
 the project's environment. Build the frontend first. No actual ADB is invoked.
 """
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 import re
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
 
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import sync_playwright, expect, Error as PlaywrightError
 
 
 def main():
@@ -49,6 +51,31 @@ def main():
                     try:
                         page = browser.new_page(viewport={'width': 1600, 'height': 1100})
                         errors = []
+                        cases, network, technical = [], [], []
+                        active_case, case_started = 'UI-01', datetime.now().astimezone().isoformat()
+                        def begin(case_id):
+                            nonlocal active_case, case_started
+                            active_case, case_started = case_id, datetime.now().astimezone().isoformat()
+                        def record(case_id, expected, actual):
+                            screenshot = case_id + '.png'
+                            page.screenshot(path=str(args.artifacts / screenshot), full_page=True)
+                            cases.append({'case_id':case_id,'status':'通过','started_at':case_started,
+                                          'finished_at':datetime.now().astimezone().isoformat(),'url':page.url,
+                                          'expected':expected,'actual':actual,'screenshot':screenshot})
+                        def response_evidence(response):
+                            if '/api/' in response.url or response.status >= 400:
+                                item = {'case_id':active_case,'time':datetime.now().astimezone().isoformat(),
+                                        'method':response.request.method,'url':response.url,
+                                        'request':response.request.post_data,'status':response.status,'resource_type':response.request.resource_type}
+                                try:
+                                    item['response'] = response.json() if '/api/' in response.url else response.text()
+                                except (PlaywrightError, ValueError) as error:
+                                    item['response'] = None
+                                    item['body_unavailable'] = str(error)
+                                network.append(item)
+                        page.on('response', response_evidence)
+                        page.on('console', lambda message: technical.append({'case_id':active_case,'type':'console','level':message.type,'message':message.text,'location':message.location}))
+                        page.on('requestfailed', lambda request: technical.append({'case_id':active_case,'type':'requestfailed','url':request.url,'error':request.failure}))
                         state_posts = []
                         page.on('request', lambda request: state_posts.append(request.url) if request.method == 'POST' and request.url.endswith('/api/states') else None)
                         page.on('pageerror', lambda error: errors.append(str(error)))
@@ -128,6 +155,8 @@ def main():
                         assert initial['workbench']['roi_enabled'] is True
                         assert initial['recognition']['region'] == initial['workbench']['recognition_region']
                         assert initial['recognition']['region'] != [0, 0, 1, 1]
+                        record('UI-01', '空名无写入、有效名称自动保存模板及原图', '空名与服务端失败均显示在抽屉；补名后 F4 保存、自动 ID 与原图一致')
+                        begin('UI-02')
                         drawer.get_by_role('button', name='识别预览', exact=True).click()
                         expect(page.locator('.preview-results')).to_contain_text('命中')
                         drawer.get_by_role('button', name='取消编辑', exact=True).click()
@@ -138,6 +167,8 @@ def main():
                             page.keyboard.press('F6')
                         assert not errors, errors
 
+                        record('UI-02', '草稿和分组预览命中且不执行动作', '图片预览命中；F6 发送分组预览请求')
+                        begin('UI-03')
                         # Live Vue form persists combined recognition and ROI, with no prototype storage.
                         page.locator('.state-card').click()
                         drawer.get_by_text('文字匹配', exact=True).click()
@@ -178,6 +209,8 @@ def main():
                         expect(drawer.get_by_role('checkbox', name='文字匹配', exact=True)).to_be_checked()
                         expect(drawer.locator('input[type=radio][value=or]')).to_be_checked()
                         assert field(drawer, '候选文案').locator('input').evaluate_all('(nodes)=>nodes.map(node=>node.value)') == ['CONFIRM', '完成']
+                        record('UI-03', '保存后刷新保持候选、组合关系、原图和框选', '两候选文案及 OR 恢复，完整截图 640×480 与识别区恢复')
+                        begin('UI-04')
                         expect(drawer.get_by_role('button', name='识别预览', exact=True)).to_be_enabled()
                         drawer.get_by_role('button', name='识别预览', exact=True).click()
                         expect(drawer.locator('.el-alert--error')).to_contain_text('当前未启用 OCR')
@@ -190,6 +223,8 @@ def main():
                         expect(drawer.get_by_role('button', name='执行动作 F5', exact=True)).to_be_enabled()
                         drawer.get_by_role('button', name='执行动作 F5', exact=True).click()
                         expect(drawer.locator('.el-alert--error')).to_contain_text('选择在线 ADB 设备')
+                        record('UI-04', '缺 OCR/设备要解释，允许仅图片预览', '完整预览显示 OCR 原因，仅图片命中且标注范围，执行提示先选设备')
+                        begin('UI-05')
                         page.locator('input[type=file]').set_input_files(data / 'browser-page.png')
                         expect(canvas).to_be_visible()
                         # Text-only configuration is also supported, without losing candidate text.
@@ -247,9 +282,11 @@ def main():
                         left, right = page.locator('.capture-pane').bounding_box(), drawer.bounding_box()
                         assert left['y'] + left['height'] <= right['y']
                         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+                        record('UI-05', '900px 下 State 编辑器上下排列且无横向溢出', '识别区与表单无交叠，页面宽度未超视口')
                         page.set_viewport_size({'width': 1600, 'height': 1100})
                         drawer.get_by_role('button', name='取消编辑', exact=True).click()
 
+                        begin('UI-06')
                         # Cancelling a new crop must leave the persisted template intact.
                         original = api('/api/states')[0]
                         asset_before = page.request.get(base + '/assets/' + original['recognition']['asset']).body()
@@ -306,6 +343,8 @@ def main():
                         page.locator('.el-message-box:visible').get_by_role('button', name='确定', exact=True).click()
                         expect(page.locator('.state-card')).to_have_count(1)
 
+                        record('UI-06', '取消裁剪不覆盖原模板，保存的独立点击区可执行', '原模板字节未改变，F5 确认后替身收到 target_box 动作')
+                        begin('UI-07')
                         page.get_by_role('button', name='循环流程', exact=True).click()
                         form = page.locator('.flow-layout .el-card').nth(1)
                         expect(field(form, '流程 ID')).to_have_count(0)
@@ -326,6 +365,10 @@ def main():
                         expect(page.locator('.flow-layout')).not_to_contain_text(receive_flow_id)
                         expect(page.locator('.el-message')).to_have_count(0)
                         page.screenshot(path=str(args.artifacts / 'flow-optional-states.png'), full_page=True)
+                        page.set_viewport_size({'width':900,'height':1100})
+                        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'flow layout overflow'
+                        page.screenshot(path=str(args.artifacts / 'flow-900.png'), full_page=True)
+                        page.set_viewport_size({'width':1600,'height':1100})
                         field(form, '按分组添加').locator('.el-select').click()
                         page.locator('.el-select-dropdown__item:visible').filter(has_text='收货验证').click()
                         form.get_by_role('button', name='添加当前分组', exact=True).click()
@@ -338,6 +381,8 @@ def main():
                         expect(page.locator('.flow-card').filter(has_text='收货循环副本')).to_be_visible()
                         assert len(api('/api/flows')) == 2
                         assert len({f['id'] for f in api('/api/flows')}) == 2
+                        record('UI-07', '流程 ID 隐藏、空选可保存、按名称复制', '空选保存成功且启动禁用；添加分组后保存，两个副本内部 ID 不同')
+                        begin('UI-08')
                         page.locator('.flow-card').filter(has=page.get_by_text('收货循环', exact=True)).click()
                         form.get_by_role('button', name='保存并启动', exact=True).click()
                         for _ in range(100):
@@ -372,6 +417,8 @@ def main():
                         page.locator('.el-select-dropdown__item:visible').filter(has_text=run_id).click()
                         expect(panel.locator('.run-summary')).to_contain_text('cancelled')
                         # Keep process-based tasks alive while browser screenshots/control run.
+                        record('UI-08', '暂停确认后截图稳定，继续/停止及刷新历史有效', '暂停后 frame_url 不变，继续运行，停止后 cancelled，刷新可重开')
+                        begin('UI-09')
                         saved_flow = next(f for f in api('/api/flows') if f['id'] == receive_flow_id)
                         assert page.request.post(base + '/api/flows', data={**saved_flow, 'completion_count': 100}).ok
                         page.get_by_role('button', name='任务', exact=True).click()
@@ -384,6 +431,10 @@ def main():
                         expect(tasks.locator('.task-card')).to_have_count(1)
                         task = api('/api/tasks')[0]
                         assert task['id'] and task['flow_id'] == receive_flow_id
+                        page.set_viewport_size({'width':900,'height':1100})
+                        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'task layout overflow'
+                        page.screenshot(path=str(args.artifacts / 'task-900.png'), full_page=True)
+                        page.set_viewport_size({'width':1600,'height':1100})
                         tasks.get_by_role('button', name='手动启动', exact=True).click()
                         dialog = page.locator('.el-dialog:visible')
                         field(dialog, 'ADB 设备').locator('.el-select').click()
@@ -403,21 +454,29 @@ def main():
                         assert all(r['live'] for r in task_runs)
                         expect(page.locator('.el-message-box:visible')).to_have_count(0)
                         page.screenshot(path=str(args.artifacts / 'tasks-workbench.png'), full_page=True)
+                        record('UI-09', '离线设备禁选，两在线设备独立启动', '页面保存任务并选两设备启动，同一批次产生两个 live 运行')
+                        begin('UI-10')
                         # Pause/cancel is independent per run; the other device keeps running.
                         first, second = task_runs
-                        response = page.request.post(base + '/api/pause', data={'id': first['id']})
-                        assert response.ok, response.text()
+                        dialog.locator('.result-row').filter(has=page.get_by_text(first['serial'],exact=True)).get_by_role('button', name='查看运行', exact=True).click()
+                        expect(panel.get_by_role('button', name='暂停', exact=True)).to_be_enabled()
+                        panel.get_by_role('button', name='暂停', exact=True).click()
                         wait_status(first['id'], 'paused')
                         assert api('/api/runs/' + second['id'])['status'] == 'running'
-                        for run in task_runs:
-                            assert page.request.post(base + '/api/cancel', data={'id': run['id']}).ok
-                            wait_status(run['id'], 'cancelled')
+                        panel.get_by_role('button', name='停止', exact=True).click()
+                        wait_status(first['id'], 'cancelled')
+                        panel.locator('.el-select').click()
+                        page.locator('.el-select-dropdown__item:visible').filter(has_text=second['id']).click()
+                        panel.get_by_role('button', name='停止', exact=True).click()
+                        wait_status(second['id'], 'cancelled')
                         page.reload()
                         expect(page.get_by_text('API 在线', exact=True)).to_be_visible()
                         page.get_by_role('button', name='任务', exact=True).click()
                         expect(page.locator('.task-card')).to_have_count(1)
                         assert len([r for r in api('/api/runs') if r.get('task_id') == task['id']]) == 2
                         assert not errors, errors
+                        record('UI-10', '一台暂停不影响另一台，页面独立停止并保留历史', '页面暂停设备一时设备二 running；分别停止后刷新仍有两条历史')
+                        begin('UI-11')
                         # Legacy or missing capture links cannot leave an unrelated screenshot visible.
                         for capture_link in [None, 'missing-original']:
                             payload = {'id': 'capture-edge', 'name': '原图异常验证', 'recognition': {'type': 'text', 'texts': ['OK']}}
@@ -436,8 +495,71 @@ def main():
                                 expect(page.get_by_text('此 State 尚未关联完整截图，请重新导入原图并保存一次。', exact=True)).to_be_visible()
                             assert page.request.post(base + '/api/states/delete', data={'id': 'capture-edge'}).ok
                         assert not errors, errors
-                        print('Chromium smoke passed: A layout, combined recognition/ROI persistence and responsive layout; State/flow editing, task save and two-device launch, independent pause/cancel, reload and evidence; no page errors')
+                        record('UI-11', '原图缺失时清除旧截图并说明原因', '无关联和丢失关联两种场景均无残留截图，错误提示可见')
+                        begin('UI-12')
+                        race_state = {'id':'import-race','name':'另一编辑状态','recognition':original['recognition']}
+                        assert page.request.post(base + '/api/states', data=race_state).ok
+                        page.reload()
+                        expect(page.get_by_text('API 在线', exact=True)).to_be_visible()
+                        page.locator('.state-card').filter(has_text=state_id).click()
+                        name_before = field(drawer, '名称').locator('input').input_value()
+                        page.evaluate("""() => { const originalFetch=window.fetch; window.restoreBusinessFetch=()=>{window.fetch=originalFetch;};
+                            window.fetch=async(...args)=>{if(['/api/import','/api/capture'].includes(args[0]))await new Promise(r=>setTimeout(r,800));return originalFetch(...args);}; }""")
+                        with page.expect_response(lambda r:r.url.endswith('/api/import')):
+                            page.locator('input[type=file]').set_input_files(data / 'browser-page.png')
+                            expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_disabled()
+                            expect(page.get_by_text('正在处理请求，请稍候。', exact=True)).to_be_visible()
+                            page.locator('.state-card').filter(has_text='import-race').click()
+                            expect(field(drawer, '名称').locator('input')).to_have_value(name_before)
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
+                        page.locator('.toolbar .el-select').click()
+                        page.locator('.el-select-dropdown__item:visible').filter(has_text=re.compile('^browser-device ·')).click()
+                        with page.expect_response(lambda r:r.url.endswith('/api/capture')):
+                            page.get_by_role('button', name='设备截图 F1', exact=True).click()
+                            expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_disabled()
+                            page.locator('.state-card').filter(has_text='import-race').click()
+                            expect(field(drawer, '名称').locator('input')).to_have_value(name_before)
+                        expect(drawer.get_by_role('button', name='保存 State', exact=True)).to_be_enabled()
+                        page.evaluate('window.restoreBusinessFetch()')
+                        assert page.request.post(base + '/api/states/delete', data={'id':'import-race'}).ok
+                        record('UI-12', '导入/截图期间不得切换编辑上下文', '两种延迟请求期间保存禁用，点击另一 State 均未切换，返回后仍是原编辑状态；另有模型测试验证启动防重')
+                        begin('UI-13')
+                        page.get_by_role('button', name='循环流程', exact=True).click()
+                        page.locator('.flow-card').filter(has=page.get_by_text('收货循环',exact=True)).click()
+                        with page.expect_response(lambda r:r.url.endswith('/api/debug/start')) as step:
+                            form.get_by_role('button', name='步进调试', exact=True).click()
+                        assert step.value.ok, step.value.text()
+                        step_id = step.value.json()['results'][0]['id']
+                        wait_status(step_id, 'waiting')
+                        expect(panel.get_by_role('button', name='执行下一步', exact=True)).to_be_enabled()
+                        panel.get_by_role('button', name='执行下一步', exact=True).click()
+                        for _ in range(150):
+                            detail = api('/api/runs/' + step_id)
+                            if detail['status']=='waiting' and detail['rounds']==1:break
+                            page.wait_for_timeout(50)
+                        assert detail['status']=='waiting' and detail['rounds']==1, detail
+                        page.wait_for_timeout(200)
+                        assert api('/api/runs/' + step_id)['rounds']==1
+                        expect(panel.get_by_role('button', name='执行下一步', exact=True)).to_be_enabled()
+                        page.screenshot(path=str(args.artifacts / 'step-waiting.png'), full_page=True)
+                        panel.get_by_role('button', name='切换自动执行', exact=True).click()
+                        wait_status(step_id, 'running')
+                        panel.get_by_role('button', name='停止', exact=True).click()
+                        wait_status(step_id, 'cancelled')
+                        expect(panel.locator('.run-summary')).to_contain_text('cancelled')
+                        record('UI-13', '页面可启动步进且只运行一轮、可切换自动并停止', '页面点击步进调试，下一步后恰好一轮，再切自动并停止成功')
+                        assert not errors, errors
+                        print('Chromium smoke passed: State, recognition, flows, tasks, request isolation and step controls; no page errors')
                     finally:
+                        if sys.exc_info()[0] is not None:
+                            cases.append({'case_id':active_case,'status':'失败','actual':str(sys.exc_info()[1])})
+                            try:
+                                page.screenshot(path=str(args.artifacts / 'failure.png'), full_page=True)
+                            except PlaywrightError:
+                                pass
+                        (args.artifacts / 'cases.json').write_text(json.dumps(cases,ensure_ascii=False,indent=2),encoding='utf-8')
+                        (args.artifacts / 'network.json').write_text(json.dumps(network,ensure_ascii=False,indent=2),encoding='utf-8')
+                        (args.artifacts / 'technical.json').write_text(json.dumps({'page_errors':errors,'events':technical},ensure_ascii=False,indent=2),encoding='utf-8')
                         browser.close()
             finally:
                 if process.poll() is None:
