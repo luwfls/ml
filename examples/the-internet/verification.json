@@ -1,0 +1,84 @@
+{
+  "verified_at": "2026-11-06T18:33:38.613121+08:00",
+  "baseline_commit": "c215197cc0c8fb169ff77bd119dfaa7830dc566c",
+  "upstream_commit": "412661999056d1cc302a920f8ec1b177eaa8ae3d",
+  "environment": {
+    "os": "Linux",
+    "browser": "150.0.7871.181",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "device_scale_factor": 1
+  },
+  "recording": "real browser screenshots of locally rendered pinned upstream pages",
+  "replay_mode": "existing saved States/templates; no --record; State/flow/image hashes unchanged",
+  "flow_cases": [
+    {
+      "flow_id": "checkbox-cycle",
+      "status": "passed",
+      "actions": [
+        "checkbox-01",
+        "checkbox-11",
+        "checkbox-10"
+      ],
+      "independent_dom_result": [
+        false,
+        false
+      ],
+      "result": {
+        "status": "passed",
+        "reason": "completion_count_reached",
+        "success_count": 1,
+        "dry_run": false
+      }
+    },
+    {
+      "flow_id": "add-element",
+      "status": "passed",
+      "actions": [
+        "element-empty"
+      ],
+      "independent_dom_result": 1,
+      "result": {
+        "status": "passed",
+        "reason": "completion_count_reached",
+        "success_count": 1,
+        "dry_run": false
+      }
+    },
+    {
+      "flow_id": "remove-element",
+      "status": "passed",
+      "actions": [
+        "element-delete"
+      ],
+      "independent_dom_result": 0,
+      "result": {
+        "status": "passed",
+        "reason": "completion_count_reached",
+        "success_count": 1,
+        "dry_run": false
+      }
+    }
+  ],
+  "technical_events": [],
+  "http_errors": [],
+  "workbench": {
+    "state_count": 8,
+    "flow_count": 3,
+    "checkbox_flow_state_count": 4,
+    "original_capture_restored": true,
+    "image_preview": "matched",
+    "page_errors": []
+  },
+  "core_unit_tests": {
+    "passed": 19,
+    "failed": 0
+  },
+  "limitations": [
+    "browser adapter, not Android hardware",
+    "local upstream-page snapshot, not live Heroku deployment",
+    "fixed Linux Chromium pixel templates; cross-platform pixels unverified"
+  ]
+}

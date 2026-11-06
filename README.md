@@ -113,6 +113,8 @@ Windows 使用 `.\.venv\Scripts\python.exe -m automation --ocr-config ocr.local.
 
 ## 验证
 
+可实际重放的开放系统样例见 [The Internet State 与流程](examples/the-internet/README.md)：包含 8 个 State、3 个流程、完整截图及模板，使用真实浏览器截图和坐标点击验证原有识别/运行引擎。
+
 先构建前端，再跑测试（其中一个测试验证构建后的静态资源确实能被后端提供）：
 
 ```bash

@@ -1,0 +1,15 @@
+{
+  "id": "checkbox-cycle",
+  "name": "复选框三步切换至全部取消",
+  "state_ids": [
+    "checkbox-01",
+    "checkbox-11",
+    "checkbox-10",
+    "checkbox-00"
+  ],
+  "max_rounds": 12,
+  "timeout_seconds": 15,
+  "poll_ms": 100,
+  "completion_count": 1,
+  "dry_run": false
+}

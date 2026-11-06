@@ -1,0 +1,36 @@
+{
+  "id": "checkbox-00",
+  "name": "复选框 00：全部取消成功",
+  "group": "The Internet 公开系统样例",
+  "role": "success",
+  "recognition": {
+    "type": "image",
+    "asset": "checkbox-00.png",
+    "threshold": 0.999,
+    "scales": [
+      1.0
+    ],
+    "region": [
+      0.11953125,
+      0.0675,
+      0.21328125,
+      0.12625
+    ]
+  },
+  "workbench": {
+    "capture_id": "checkbox-00",
+    "roi_enabled": true,
+    "recognition_region": [
+      0.11953125,
+      0.0675,
+      0.21328125,
+      0.12625
+    ]
+  },
+  "actions": [],
+  "conditions": {
+    "required_states": [],
+    "excluded_states": []
+  },
+  "priority": 1.0
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- Local static rendering of the upstream view; layout reduced to required CSS and jQuery. See provenance.json. -->
+<html lang="en"><head><meta charset="utf-8"><title>The Internet</title>
+<link rel="icon" href="data:,"><link rel="stylesheet" href="/upstream/app.css">
+<script src="/upstream/jquery.js"></script></head>
+<body><div class="row"><div id="content" class="large-12 columns"><h3>Add/Remove Elements</h3>
+</br>
+<div class="example">
+  <button onclick="addElement()">Add Element</button>
+  <hr />
+  <div id="elements">
+
+  </div>
+</div>
+
+<script>
+  function addElement() {
+    $("<button class='added-manually' onclick='deleteElement()'>Delete</button>").appendTo('#elements');
+  }
+  function deleteElement() {
+    $('#elements button:first-child').remove();
+  }
+</script>
+<style>
+button.added-manually {
+  margin-right: 0.285em;
+}
+button {
+  margin-bottom: 10px;
+}
+</style>
+</div></div></body></html>

@@ -1,0 +1,13 @@
+{
+  "id": "add-element",
+  "name": "添加一个页面元素",
+  "state_ids": [
+    "element-empty",
+    "element-added"
+  ],
+  "max_rounds": 12,
+  "timeout_seconds": 15,
+  "poll_ms": 100,
+  "completion_count": 1,
+  "dry_run": false
+}

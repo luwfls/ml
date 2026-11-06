@@ -1,0 +1,38 @@
+{
+  "id": "element-cleared",
+  "name": "Delete 消失：删除成功",
+  "group": "The Internet 公开系统样例",
+  "role": "success",
+  "recognition": {
+    "type": "image",
+    "asset": "element-cleared.png",
+    "threshold": 0.999,
+    "scales": [
+      1.0
+    ],
+    "region": [
+      0.12109375,
+      0.09,
+      0.23671875,
+      0.1475
+    ]
+  },
+  "workbench": {
+    "capture_id": "element-cleared",
+    "roi_enabled": true,
+    "recognition_region": [
+      0.12109375,
+      0.09,
+      0.23671875,
+      0.1475
+    ]
+  },
+  "actions": [],
+  "conditions": {
+    "required_states": [],
+    "excluded_states": [
+      "element-added"
+    ]
+  },
+  "priority": 1.0
+}

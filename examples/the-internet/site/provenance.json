@@ -1,0 +1,43 @@
+{
+  "repository": "https://github.com/saucelabs/the-internet",
+  "commit": "412661999056d1cc302a920f8ec1b177eaa8ae3d",
+  "files": {
+    "checkboxes.erb": {
+      "source_url": "https://raw.githubusercontent.com/saucelabs/the-internet/412661999056d1cc302a920f8ec1b177eaa8ae3d/views/checkboxes.erb",
+      "sha256": "2709def34dab7f52ba3faa1e7483ba3ac8ee10ded00f13d43434bc838926e9dc"
+    },
+    "add_remove_elements.erb": {
+      "source_url": "https://raw.githubusercontent.com/saucelabs/the-internet/412661999056d1cc302a920f8ec1b177eaa8ae3d/views/add_remove_elements.erb",
+      "sha256": "51eab5e685dcdb0a123c7f930586b00641bc8e49426df5b526c950b496ac9a7c"
+    },
+    "app.css": {
+      "source_url": "https://raw.githubusercontent.com/saucelabs/the-internet/412661999056d1cc302a920f8ec1b177eaa8ae3d/public/css/app.css",
+      "sha256": "86cc46b54a3c51d1665050e2acbc7a9aea7480e8035d0a29a9436e3ac0ff8f8d"
+    },
+    "jquery.js": {
+      "source_url": "https://raw.githubusercontent.com/saucelabs/the-internet/412661999056d1cc302a920f8ec1b177eaa8ae3d/public/js/vendor/jquery-1.11.3.min.js",
+      "sha256": "ecb916133a9376911f10bc5c659952eb0031e457f5df367cde560edbfba38fb8"
+    },
+    "LICENSE": {
+      "source_url": "https://raw.githubusercontent.com/saucelabs/the-internet/412661999056d1cc302a920f8ec1b177eaa8ae3d/LICENSE",
+      "sha256": "a7d3b7d68be4fab92f2319048e99a5ad4a86a300440a833392ee41d3e4b9292f"
+    },
+    "license.txt": {
+      "source_url": "https://raw.githubusercontent.com/saucelabs/the-internet/412661999056d1cc302a920f8ec1b177eaa8ae3d/license.txt",
+      "sha256": "d0a8b71dc0c37fb2ba8c2abff96c16d6133a2edfd08f20adab9eeca77c881d9a"
+    },
+    "rendered": {
+      "checkboxes": {
+        "sha256": "2fae4300d7a05d24c787e07c9d40cb14228c97d09b20fe0a5aaf955757098178",
+        "view": "checkboxes.erb",
+        "number_of_elements": null
+      },
+      "add_remove_elements": {
+        "sha256": "5224cc141ef2fba6ab89c8edf25dc3c4525f1d73aa34e9320d04d9b2a56cce6e",
+        "view": "add_remove_elements.erb",
+        "number_of_elements": null
+      }
+    }
+  },
+  "rendering": "Original ERB bodies rendered with number_of_elements=nil; minimal local layout; original click/DOM handlers unchanged. No Sinatra backend or public-site connectivity claimed. Rendered HTML trailing whitespace trimmed."
+}

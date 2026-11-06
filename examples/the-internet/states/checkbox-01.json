@@ -1,0 +1,50 @@
+{
+  "id": "checkbox-01",
+  "name": "复选框 01 → 点击第一项",
+  "group": "The Internet 公开系统样例",
+  "role": "normal",
+  "recognition": {
+    "type": "image",
+    "asset": "checkbox-01.png",
+    "threshold": 0.999,
+    "scales": [
+      1.0
+    ],
+    "region": [
+      0.11953125,
+      0.0675,
+      0.21328125,
+      0.12625
+    ]
+  },
+  "workbench": {
+    "capture_id": "checkbox-01",
+    "roi_enabled": true,
+    "recognition_region": [
+      0.11953125,
+      0.0675,
+      0.21328125,
+      0.12625
+    ]
+  },
+  "actions": [
+    {
+      "type": "click_match",
+      "target_box": [
+        0.016666666666666666,
+        0.0425531914893617,
+        0.125,
+        0.3404255319148936
+      ]
+    },
+    {
+      "type": "wait",
+      "ms": 100
+    }
+  ],
+  "conditions": {
+    "required_states": [],
+    "excluded_states": []
+  },
+  "priority": 1.0
+}

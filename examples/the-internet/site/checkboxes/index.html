@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- Local static rendering of the upstream view; layout reduced to required CSS and jQuery. See provenance.json. -->
+<html lang="en"><head><meta charset="utf-8"><title>The Internet</title>
+<link rel="icon" href="data:,"><link rel="stylesheet" href="/upstream/app.css">
+<script src="/upstream/jquery.js"></script></head>
+<body><div class="row"><div id="content" class="large-12 columns"><div class="example">
+  <h3>Checkboxes</h3>
+  <form id='checkboxes'>
+    <input type="checkbox"> checkbox 1</br>
+    <input type="checkbox" checked> checkbox 2
+  </form>
+</div>
+<script>
+var form = document.getElementById('checkboxes');
+var checkboxes = form.getElementsByTagName('input');
+for (var i=0, len=checkboxes.length; i<len; i++) {
+    checkboxes[i].onclick = function() {
+      this.checked ? this.setAttribute("checked", "") : this.removeAttribute("checked");
+    }
+}
+</script>
+</div></div></body></html>

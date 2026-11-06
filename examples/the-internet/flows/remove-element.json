@@ -1,0 +1,13 @@
+{
+  "id": "remove-element",
+  "name": "删除刚添加的页面元素",
+  "state_ids": [
+    "element-delete",
+    "element-cleared"
+  ],
+  "max_rounds": 12,
+  "timeout_seconds": 15,
+  "poll_ms": 100,
+  "completion_count": 1,
+  "dry_run": false
+}

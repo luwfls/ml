@@ -1,0 +1,50 @@
+{
+  "id": "checkbox-11",
+  "name": "复选框 11 → 点击第二项",
+  "group": "The Internet 公开系统样例",
+  "role": "normal",
+  "recognition": {
+    "type": "image",
+    "asset": "checkbox-11.png",
+    "threshold": 0.999,
+    "scales": [
+      1.0
+    ],
+    "region": [
+      0.11953125,
+      0.0675,
+      0.21328125,
+      0.12625
+    ]
+  },
+  "workbench": {
+    "capture_id": "checkbox-11",
+    "roi_enabled": true,
+    "recognition_region": [
+      0.11953125,
+      0.0675,
+      0.21328125,
+      0.12625
+    ]
+  },
+  "actions": [
+    {
+      "type": "click_match",
+      "target_box": [
+        0.016666666666666666,
+        0.6595744680851063,
+        0.125,
+        0.9574468085106383
+      ]
+    },
+    {
+      "type": "wait",
+      "ms": 100
+    }
+  ],
+  "conditions": {
+    "required_states": [],
+    "excluded_states": []
+  },
+  "priority": 1.0
+}

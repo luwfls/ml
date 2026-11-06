@@ -1,0 +1,22 @@
+{
+  "system": "The Internet",
+  "source": "https://github.com/saucelabs/the-internet",
+  "routes": [
+    "/checkboxes/",
+    "/add_remove_elements/"
+  ],
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "device_scale_factor": 1,
+  "deployment": "Local static rendering of pinned upstream views; see site/provenance.json",
+  "recorded_at": "2026-11-06T18:30:23.270991+08:00",
+  "browser": "150.0.7871.181",
+  "flow_order": [
+    "checkbox-cycle",
+    "add-element",
+    "remove-element"
+  ],
+  "device": "Playwright screenshot/click adapter, not Android ADB"
+}
