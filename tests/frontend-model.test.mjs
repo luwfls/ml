@@ -171,6 +171,19 @@ test('F4 opens the save drawer without persisting, then saves from a focused for
     context.locked=true;context.openSaveDrawer();assert.equal(context.saveDrawer,false);
   }finally{globalThis.document=previousDocument;}
 });
+test('F4 creates independent drafts from an existing State and keeps the capture and region',async()=>{
+  const vm=await workbenchContext(),existing=vm.editor;
+  vm.captureId='same-capture';vm.captureUrl='/captures/same-capture.png';vm.groupFilter='制作组';
+  vm.selection={recognition:[100,50,200,150],click:[],size:[640,480]};
+  vm.openSaveDrawer();
+  assert.notEqual(vm.editor.id,existing.id);assert.deepEqual(vm.editor.original,{group:'制作组'});
+  assert.equal(vm.editor.name,'');assert.equal(vm.editor.captureId,'same-capture');
+  assert.equal(vm.captureUrl,'/captures/same-capture.png');
+  assert.deepEqual(vm.editor.recognitionBox,[100/640,50/480,200/640,150/480]);
+  assert.equal(existing.name,'原编辑状态');
+  const first=vm.editor;vm.openSaveDrawer();assert.equal(vm.editor,first);
+  vm.closeStateEditor();vm.openSaveDrawer();assert.notEqual(vm.editor.id,first.id);
+});
 test('editing a saved state preserves unknown fields and wait-only actions', () => {
   assert.equal(typeof model.editState, 'function');
   const state = {id:'a', name:'旧', extra:{retain:true}, recognition:{type:'text', texts:['好'], region:[.1,.2,.8,.9], custom:42}, actions:[{type:'wait',ms:123,other:true}], conditions:{required_states:['b'], excluded_states:['c'], custom:1}};

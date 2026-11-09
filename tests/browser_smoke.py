@@ -36,7 +36,7 @@ def main():
         with (data / 'backend.log').open('w') as log:
             process = subprocess.Popen([args.python, str(root / 'tests/browser_backend.py'), '--data', str(data), '--port', str(port)], stdout=log, stderr=log, cwd=root)
             try:
-                for _ in range(100):
+                for _ in range(600):
                     try:
                         urllib.request.urlopen(base + '/api/health', timeout=.5).close()
                         break
@@ -124,6 +124,7 @@ def main():
                         assert re.fullmatch('[a-f0-9]{32}', state_id)
                         expect(field(drawer, 'ID').locator('input')).to_have_attribute('readonly', 'readonly')
                         page.keyboard.press('F4')
+                        state_id = field(drawer, 'ID').locator('input').input_value()
                         for invalid_name in ['', '   ']:
                             field(drawer, '名称').locator('input').fill(invalid_name)
                             page.keyboard.press('F4')
@@ -180,13 +181,6 @@ def main():
                         candidates.locator('input').nth(2).fill('移除项')
                         candidates.get_by_role('button', name='移除', exact=True).nth(2).click()
                         drawer.get_by_text('或 OR', exact=True).click()
-                        page.keyboard.press('F4')
-                        expect(page.locator('.el-drawer:visible')).to_have_count(1)
-                        page.set_viewport_size({'width': 1600, 'height': 1600})
-                        page.evaluate('window.scrollTo(0,0)')
-                        page.screenshot(path=str(args.artifacts / 'state-save-drawer.png'), full_page=False, animations='disabled')
-                        page.set_viewport_size({'width': 1600, 'height': 1100})
-                        drawer.get_by_role('button', name='取消编辑', exact=True).click()
                         with page.expect_response(lambda r: r.url.endswith('/api/states') and r.request.method == 'POST') as save_response:
                             drawer.get_by_role('button', name='保存 State', exact=True).click()
                         assert save_response.value.ok, save_response.value.text()
@@ -548,6 +542,75 @@ def main():
                         wait_status(step_id, 'cancelled')
                         expect(panel.locator('.run-summary')).to_contain_text('cancelled')
                         record('UI-13', '页面可启动步进且只运行一轮、可切换自动并停止', '页面点击步进调试，下一步后恰好一轮，再切自动并停止成功')
+                        assert not errors, errors
+                        begin('F4-01')
+                        page.get_by_role('button', name='State 制作', exact=True).click()
+                        page.locator('.state-card').filter(has_text=state_id).click()
+                        before = api('/api/states')
+                        old_state = next(s for s in before if s['id'] == state_id)
+                        capture_id = old_state['workbench']['capture_id']
+                        expect(canvas).to_be_visible()
+                        page.keyboard.press('F2')
+                        bounds = canvas.bounding_box()
+                        scale = bounds['width'] / 640
+                        page.mouse.move(bounds['x'] + 410*scale, bounds['y'] + 300*scale)
+                        page.mouse.down()
+                        page.mouse.move(bounds['x'] + 570*scale, bounds['y'] + 380*scale, steps=10)
+                        page.mouse.up()
+                        page.keyboard.press('F4')
+                        expect(page.locator('.el-drawer:visible')).to_have_count(1)
+                        new_id = field(drawer, 'ID').locator('input').input_value()
+                        assert new_id != state_id, 'F4 must create a new State rather than edit the selected one'
+                        expect(field(drawer, '名称').locator('input')).to_have_value('')
+                        assert api('/api/states') == before
+                        field(drawer, '名称').locator('input').fill('同图第二模板')
+                        with page.expect_response(lambda r:r.url.endswith('/api/states') and r.request.method == 'POST') as saved:
+                            page.keyboard.press('F4')
+                        assert saved.value.ok, saved.value.text()
+                        expect(page.locator('.el-drawer:visible')).to_have_count(0)
+                        after = api('/api/states')
+                        second = next(s for s in after if s['id'] == new_id)
+                        assert len(after) == len(before) + 1
+                        assert next(s for s in after if s['id'] == state_id) == old_state
+                        assert second['workbench']['capture_id'] == capture_id
+                        assert second['recognition']['region'] == [410/640,300/480,570/640,380/480]
+                        assert second['recognition']['asset'] != (old_state['recognition'].get('image') or old_state['recognition'])['asset']
+                        record('F4-01', '已有 State 上 F4 生成新 ID，保留原图和新选区，原 State 不变', '第二模板独立保存；同图不同裁剪；原 State 全字段保持一致')
+                        begin('F4-02')
+                        page.keyboard.press('F4')
+                        expect(page.locator('.el-drawer:visible')).to_have_count(1)
+                        third_id = field(drawer, 'ID').locator('input').input_value()
+                        assert third_id not in [state_id,new_id]
+                        expect(field(drawer, '名称').locator('input')).to_have_value('')
+                        field(drawer, '名称').locator('input').fill('同图第三模板')
+                        with page.expect_response(lambda r:r.url.endswith('/api/states') and r.request.method == 'POST') as saved:
+                            page.keyboard.press('F4')
+                        assert saved.value.ok, saved.value.text()
+                        expect(page.locator('.el-drawer:visible')).to_have_count(0)
+                        states = api('/api/states')
+                        third = next(s for s in states if s['id'] == third_id)
+                        assert len(states) == len(before) + 2
+                        assert third['workbench']['capture_id'] == capture_id
+                        assert next(s for s in states if s['id'] == new_id) == second
+                        assert next(s for s in states if s['id'] == state_id) == old_state
+                        record('F4-02', '保存后再次 F4 继续新建同图模板，无需重新导入', '第三个独立 ID 保存成功，前两个 State 均未覆盖')
+                        begin('F4-03')
+                        page.keyboard.press('F4')
+                        expect(page.locator('.el-drawer:visible')).to_have_count(1)
+                        cancelled_id = field(drawer, 'ID').locator('input').input_value()
+                        assert cancelled_id not in [state_id,new_id,third_id]
+                        drawer.get_by_role('button', name='取消编辑', exact=True).click()
+                        expect(page.locator('.el-drawer:visible')).to_have_count(0)
+                        assert api('/api/states') == states
+                        page.reload()
+                        expect(page.get_by_text('API 在线', exact=True)).to_be_visible()
+                        for expected_state in [old_state,second,third]:
+                            page.locator('.state-card').filter(has_text=expected_state['id']).click()
+                            expect(canvas).to_be_visible()
+                            expect(page.locator('.capture-workbench')).to_contain_text('截图 640 × 480 px')
+                            expect(field(drawer, '名称').locator('input')).to_have_value(expected_state['name'])
+                        assert api('/api/states') == states
+                        record('F4-03', '取消新增无写入，刷新后多个 State 可各自恢复同一原图和名称', '取消未增加记录，刷新后三个独立模板完整恢复')
                         assert not errors, errors
                         print('Chromium smoke passed: State, recognition, flows, tasks, request isolation and step controls; no page errors')
                     finally:
